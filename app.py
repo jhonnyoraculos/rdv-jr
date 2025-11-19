@@ -423,7 +423,7 @@ def generate_image(
 ) -> BytesIO:
     """Build a PNG image version of the RDV."""
     width, height = 3508, 2480  # A4 at 300dpi: 3508x2480
-    margin = 60
+    margin = 40
     img = Image.new("RGB", (width, height), "white")
     draw = ImageDraw.Draw(img)
     title_font = load_font(48, bold=True)
@@ -481,7 +481,10 @@ def generate_image(
     table_right = width - margin
     table_width = table_right - table_left
     total_rows = max(len(linhas), 1)
-    row_height = 60
+    footer_space = 120
+    header_space = table_top - margin
+    available_height = height - table_top - footer_space
+    row_height = max(36, int(available_height / (total_rows + 1)))
     if tipo == "MOTORISTA":
         columns = [
             ("DATA", "DATA", 0.15),
@@ -568,7 +571,7 @@ def generate_image(
     draw.text((table_left, table_bottom + 20), total_text, font=header_font, fill="black")
 
     # Signatures / footer
-    footer_top = table_bottom + 140
+    footer_top = table_bottom + 60
     draw.text(
         (margin, footer_top),
         "LOCAL/DATA: ________________________________",
@@ -581,7 +584,7 @@ def generate_image(
         font=regular_font,
         fill="black",
     )
-    footer_y = footer_top + 90
+    footer_y = footer_top + 60
     signature_width = (width - 2 * margin) / 3
     max_line_width = signature_width - 20
     for idx, text in enumerate(
@@ -601,7 +604,7 @@ def generate_image(
         "que exercer atividade fora da base considerando cada período modular de 24 horas, o recebimento da diária "
         "exclui-se o pagamento da ajuda de alimentação (Ticket)."
     )
-    obs_y = footer_y + 110
+    obs_y = footer_y + 60
     obs_line_height = (
         getattr(small_font, "size", 24) + 8
         if hasattr(small_font, "size")
