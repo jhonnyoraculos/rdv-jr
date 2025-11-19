@@ -19,6 +19,83 @@ RESAMPLE_FILTER = (
     Image.Resampling.LANCZOS if hasattr(Image, "Resampling") else Image.ANTIALIAS
 )
 
+# ==========================
+# CADASTRO FIXO DE COLABORADORES
+# ==========================
+COLABORADORES = [
+    # Motoristas
+    {"nome": "ALDEMIR LUIZ DA SILVA", "tipo": "MOTORISTA"},
+    {"nome": "ANDRE LUIZ", "tipo": "MOTORISTA"},
+    {"nome": "CELSO ANTONIO CAETANO", "tipo": "MOTORISTA"},
+    {"nome": "CRISTIANO CLEMENTINO OLIVEIRA", "tipo": "MOTORISTA"},
+    {"nome": "DIEGO GERALDO BAZILIO", "tipo": "MOTORISTA"},
+    {"nome": "DOUGLAS ALBERTINO GREGORIO", "tipo": "MOTORISTA"},
+    {"nome": "DOUGLAS RODRIGUES DE OLIVEIRA", "tipo": "MOTORISTA"},
+    {"nome": "FRANCES FRANCO", "tipo": "MOTORISTA"},
+    {"nome": "FRANCIS EDER NUNES", "tipo": "MOTORISTA"},
+    {"nome": "FREDER HENRIQUE MOREIRA DE CARVALHO", "tipo": "MOTORISTA"},
+    {"nome": "GABRIEL FELIPE DE FARIA OLIVEIRA", "tipo": "MOTORISTA"},
+    {"nome": "GERALDO FERNANDO DA SILVA", "tipo": "MOTORISTA"},
+    {"nome": "GUILHERME FLAVIO DOS SANTOS", "tipo": "MOTORISTA"},
+    {"nome": "HIPOCRATES HERSCHEL PINTO", "tipo": "MOTORISTA"},
+    {"nome": "IAGO RAIMUNDO DIAS", "tipo": "MOTORISTA"},
+    {"nome": "JOSE ARILDO DOMINGOS", "tipo": "MOTORISTA"},
+    {"nome": "KAIO FERNANDO", "tipo": "MOTORISTA"},
+    {"nome": "LUCAS APARECIDO ROQUE", "tipo": "MOTORISTA"},
+    {"nome": "LUCAS SILVA NOGUEIRA", "tipo": "MOTORISTA"},
+    {"nome": "MATEUS SEVERINO DE SOUZA", "tipo": "MOTORISTA"},
+    {"nome": "MATHEUS RINALDO PEREIRA VAZ", "tipo": "MOTORISTA"},
+    {"nome": "PAULO ROGERIO GONÇALVES AZEVEDO", "tipo": "MOTORISTA"},
+    {"nome": "PEDRO AMARAL E SILVA", "tipo": "MOTORISTA"},
+    {"nome": "RAYNER FRANCIS LOPES DE ALMEIDA", "tipo": "MOTORISTA"},
+    {"nome": "REGINALDO MOREIRA LÃO", "tipo": "MOTORISTA"},
+    {"nome": "RICARDO DE OLIVEIRA SILVA", "tipo": "MOTORISTA"},
+    {"nome": "RONALDO PEREIRA CORDEIRO", "tipo": "MOTORISTA"},
+    {"nome": "SIDNEY RAIMUNDO DA SILVA", "tipo": "MOTORISTA"},
+    {"nome": "WESLEY ANTONIO SENA DA SILVA", "tipo": "MOTORISTA"},
+    {"nome": "WESLEY LUCIO", "tipo": "MOTORISTA"},
+    {"nome": "HELIO APARECIDO CANEDO", "tipo": "MOTORISTA"},
+
+    # Ajudantes
+    {"nome": "ANDRE LUIS GONÇALVES PEREIRA", "tipo": "AJUDANTE"},
+    {"nome": "BRUNO HENRIQUE MENDES", "tipo": "AJUDANTE"},
+    {"nome": "CHARLES COSTA SANTOS", "tipo": "AJUDANTE"},
+    {"nome": "DEVIS PENA DE OLIVEIRA", "tipo": "AJUDANTE"},
+    {"nome": "EDER SILVA", "tipo": "AJUDANTE"},
+    {"nome": "EDUARDO ANDRADE SILVA", "tipo": "AJUDANTE"},
+    {"nome": "ELDERSON JOSE GOMES", "tipo": "AJUDANTE"},
+    {"nome": "EMERSON FELIPE MACHADO", "tipo": "AJUDANTE"},
+    {"nome": "ERASMO ROBERTO LOPES GONÇALVES", "tipo": "AJUDANTE"},
+    {"nome": "FABRICIO DA SILVA SOUSA", "tipo": "AJUDANTE"},
+    {"nome": "HIAGO HENRIQUE LOPES", "tipo": "AJUDANTE"},
+    {"nome": "JOAO HELIO SILVA LACERDA", "tipo": "AJUDANTE"},
+    {"nome": "KENEDY DEIVISON LOPES PEREIRA", "tipo": "AJUDANTE"},
+    {"nome": "LAENDER LOURENÇO DA SILVA", "tipo": "AJUDANTE"},
+    {"nome": "LUCAS GABRIEL DA SILVA", "tipo": "AJUDANTE"},
+    {"nome": "LUIS EDUARDO CUSTODIO COELHO", "tipo": "AJUDANTE"},
+    {"nome": "MARCELO DA CONCEIÇÃO SANTOS", "tipo": "AJUDANTE"},
+    {"nome": "MARCOS PAULO MILAGRES DA SILVA", "tipo": "AJUDANTE"},
+    {"nome": "MARLON GERALDO ALVES SILVA", "tipo": "AJUDANTE"},
+    {"nome": "MAYCOL LUCAS MENDES DA SILVA", "tipo": "AJUDANTE"},
+    {"nome": "ORMIR GONÇALVES BORGES", "tipo": "AJUDANTE"},
+    {"nome": "PABLO HENRIQUE NOGUEIRA GONTIJO", "tipo": "AJUDANTE"},
+    {"nome": "REGINALDO LAURO SANTOS ABREU", "tipo": "AJUDANTE"},
+    {"nome": "RICHARD SANTOS LOPES", "tipo": "AJUDANTE"},
+    {"nome": "ROBERT JHONATHAN SILVA", "tipo": "AJUDANTE"},
+    {"nome": "RUAN CARLOS DIAS FRANCO DA SILVA", "tipo": "AJUDANTE"},
+    {"nome": "RYCHARD MARTINS DA SILVA", "tipo": "AJUDANTE"},
+    {"nome": "WELLINGTON GUSTAVO SANTOS", "tipo": "AJUDANTE"},
+    {"nome": "WEVERSON FERREIRA DOS SANTOS", "tipo": "AJUDANTE"},
+]
+
+TIPOS_COLABORADOR = ["MOTORISTA", "AJUDANTE"]
+
+
+def listar_colaboradores_por_tipo(tipo: str) -> list[dict]:
+    """Retorna apenas os colaboradores do tipo informado."""
+    return [c for c in COLABORADORES if c["tipo"] == tipo]
+
+
 st.set_page_config(page_title="RDV JR", layout="wide")
 
 
@@ -30,30 +107,21 @@ def get_connection() -> sqlite3.Connection:
 
 
 def init_db() -> None:
-    """Create tables if they do not already exist."""
+    """Create RDV tables if they do not already exist."""
     with get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute(
             """
-            CREATE TABLE IF NOT EXISTS colaboradores (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                nome TEXT NOT NULL,
-                tipo TEXT NOT NULL CHECK(tipo IN ('MOTORISTA','AJUDANTE'))
-            )
-            """
-        )
-        cursor.execute(
-            """
             CREATE TABLE IF NOT EXISTS rdv (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                colaborador_id INTEGER NOT NULL,
+                colaborador_nome TEXT NOT NULL,
                 tipo TEXT NOT NULL CHECK(tipo IN ('MOTORISTA','AJUDANTE')),
                 data_inicial TEXT NOT NULL,
                 data_final TEXT NOT NULL,
                 adiantamento INTEGER NOT NULL,
                 valor_adiantamento REAL NOT NULL,
                 total_quinzena REAL NOT NULL,
-                FOREIGN KEY(colaborador_id) REFERENCES colaboradores(id)
+                colaborador_id INTEGER
             )
             """
         )
@@ -72,35 +140,51 @@ def init_db() -> None:
             )
             """
         )
-
-
-def get_colaboradores(tipo: str = "") -> list[dict]:
-    """Return a list of collaborators, optionally filtering by type."""
-    with get_connection() as conn:
-        cursor = conn.cursor()
-        if tipo:
+        cursor.execute("PRAGMA table_info(rdv)")
+        rdv_columns = [col[1] for col in cursor.fetchall()]
+        if "colaborador_nome" not in rdv_columns:
+            cursor.execute("ALTER TABLE rdv ADD COLUMN colaborador_nome TEXT NOT NULL DEFAULT ''")
+            rdv_columns.append("colaborador_nome")
+        if "colaborador_id" not in rdv_columns:
+            cursor.execute("ALTER TABLE rdv ADD COLUMN colaborador_id INTEGER")
+            rdv_columns.append("colaborador_id")
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        existing_tables = [row[0] for row in cursor.fetchall()]
+        if "colaboradores" in existing_tables:
             cursor.execute(
-                "SELECT id, nome, tipo FROM colaboradores WHERE tipo = ? ORDER BY nome",
-                (tipo,),
+                """
+                UPDATE rdv
+                SET colaborador_nome = (
+                    SELECT nome FROM colaboradores WHERE colaboradores.id = rdv.colaborador_id
+                )
+                WHERE colaborador_nome = ''
+                """
             )
-        else:
-            cursor.execute("SELECT id, nome, tipo FROM colaboradores ORDER BY nome")
-        rows = cursor.fetchall()
-    return [{"id": row[0], "nome": row[1], "tipo": row[2]} for row in rows]
 
 
-def insert_colaborador(nome: str, tipo: str) -> None:
-    """Save a new collaborator in the database."""
+def get_default_quinzena() -> tuple[date, date]:
+    """Return default quinzena anchored on next available Monday."""
+    fallback_start = date(2025, 11, 10)
+    duration = timedelta(days=12)
     with get_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute(
-            "INSERT INTO colaboradores (nome, tipo) VALUES (?, ?)", (nome.strip(), tipo)
-        )
-        conn.commit()
+        cursor.execute("SELECT data_final FROM rdv ORDER BY id DESC LIMIT 1")
+        last = cursor.fetchone()
+    if last:
+        try:
+            last_final = datetime.fromisoformat(last[0]).date()
+            candidate = last_final + timedelta(days=1)
+        except Exception:
+            candidate = fallback_start
+    else:
+        candidate = fallback_start
+    while candidate.weekday() != 0:  # 0 = Monday
+        candidate += timedelta(days=1)
+    return candidate, candidate + duration
 
 
 def insert_rdv(
-    colaborador_id: int,
+    colaborador_nome: str,
     tipo: str,
     data_inicial: date,
     data_final: date,
@@ -115,12 +199,12 @@ def insert_rdv(
         cursor.execute(
             """
             INSERT INTO rdv (
-                colaborador_id, tipo, data_inicial, data_final,
+                colaborador_nome, tipo, data_inicial, data_final,
                 adiantamento, valor_adiantamento, total_quinzena
             ) VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
             (
-                colaborador_id,
+                colaborador_nome.strip(),
                 tipo,
                 data_inicial.isoformat(),
                 data_final.isoformat(),
@@ -155,24 +239,22 @@ def insert_rdv(
 
 
 def get_rdvs() -> list[dict]:
-    """Return saved RDVs joining with collaborator data."""
+    """Return saved RDVs with collaborator metadata."""
     with get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute(
             """
             SELECT
-                rdv.id,
-                colaboradores.nome,
-                rdv.tipo,
-                rdv.data_inicial,
-                rdv.data_final,
-                rdv.adiantamento,
-                rdv.valor_adiantamento,
-                rdv.total_quinzena,
-                rdv.colaborador_id
+                id,
+                colaborador_nome,
+                tipo,
+                data_inicial,
+                data_final,
+                adiantamento,
+                valor_adiantamento,
+                total_quinzena
             FROM rdv
-            JOIN colaboradores ON colaboradores.id = rdv.colaborador_id
-            ORDER BY rdv.id DESC
+            ORDER BY id DESC
             """
         )
         rows = cursor.fetchall()
@@ -186,7 +268,6 @@ def get_rdvs() -> list[dict]:
             "adiantamento": bool(row[5]),
             "valor_adiantamento": row[6],
             "total_quinzena": row[7],
-            "colaborador_id": row[8],
         }
         for row in rows
     ]
@@ -681,43 +762,25 @@ def main() -> None:
     init_db()
     st.title("Relatório de Despesas de Viagem – RDV JR")
     page = st.sidebar.selectbox(
-        "Menu", ["Cadastro de colaboradores", "Novo RDV", "Relatórios salvos"]
+        "Menu", ["Novo RDV", "Relatórios salvos"]
     )
 
-    if page == "Cadastro de colaboradores":
-        st.header("Cadastro de colaboradores")
-        # Formulário para adicionar novos colaboradores
-        with st.form("colaborador_form"):
-            nome = st.text_input("Nome do colaborador")
-            tipo = st.selectbox("Tipo", ["Motorista", "Ajudante"])
-            submitted = st.form_submit_button("Salvar colaborador")
-        if submitted:
-            if not nome.strip():
-                st.error("Informe o nome do colaborador antes de salvar.")
-            else:
-                insert_colaborador(nome, tipo.upper())
-                st.success(f"{nome.strip()} salvo como {tipo.upper()}.")
-        colaboradores = get_colaboradores()
-        if colaboradores:
-            st.dataframe(pd.DataFrame(colaboradores))
-        else:
-            st.info("Nenhum colaborador cadastrado ainda.")
-
-    elif page == "Novo RDV":
+    if page == "Novo RDV":
         st.header("Novo RDV")
-        tipo = st.selectbox("Tipo de relatório", ["Motorista", "Ajudante"])
-        colaboradores_disponiveis = get_colaboradores(tipo.upper())
+        tipo = st.selectbox("Tipo de colaborador", TIPOS_COLABORADOR, format_func=lambda t: "Motorista" if t == "MOTORISTA" else "Ajudante")
+        colaboradores_disponiveis = listar_colaboradores_por_tipo(tipo)
         if not colaboradores_disponiveis:
             st.warning("Não há colaboradores cadastrados para o tipo selecionado.")
             return
-        modo_all_label = f"Todos os {tipo}s"
+        modo_all_label = f"Todos os {tipo.capitalize()}s"
         modo = st.radio(
             "Modo de geração",
             ["Individual", modo_all_label],
             horizontal=True,
         )
-        data_inicial = st.date_input("Data inicial", value=date.today())
-        data_final = st.date_input("Data final", value=date.today())
+        default_start, default_end = get_default_quinzena()
+        data_inicial = st.date_input("Data inicial", value=default_start)
+        data_final = st.date_input("Data final", value=default_end)
         if data_final < data_inicial:
             st.error("A data final deve ser igual ou posterior à data inicial.")
             return
@@ -732,32 +795,25 @@ def main() -> None:
                 format="%f",
             )
 
-        if st.session_state["batch_previews"].get("tipo") != tipo.upper():
+        if st.session_state["batch_previews"].get("tipo") != tipo:
             st.session_state["batch_previews"] = {"tipo": "", "previews": []}
 
         if modo == "Individual":
-            colab_options = {
-                f"{colab['nome']} ({colab['id']})": colab
-                for colab in colaboradores_disponiveis
-            }
-            selecionado = st.selectbox(
-                "Colaborador", options=list(colab_options.keys())
-            )
-            colaborador = colab_options[selecionado]
+            nomes_colabs = [c["nome"] for c in colaboradores_disponiveis]
+            nome_escolhido = st.selectbox("Colaborador", nomes_colabs)
+            colaborador = next(c for c in colaboradores_disponiveis if c["nome"] == nome_escolhido)
             if (
-                st.session_state["rdv_meta"].get("tipo") != tipo.upper()
-                or st.session_state["rdv_meta"].get("colaborador_id")
-                != colaborador["id"]
+                st.session_state["rdv_meta"].get("tipo") != tipo
+                or st.session_state["rdv_meta"].get("colaborador_nome") != colaborador["nome"]
             ):
                 st.session_state["rdv_table"] = None
                 st.session_state["rdv_meta"] = {}
 
             if st.button("Gerar tabela da quinzena"):
-                df = build_table_dataframe(tipo.upper(), data_inicial, data_final)
+                df = build_table_dataframe(tipo, data_inicial, data_final)
                 st.session_state["rdv_table"] = df
                 st.session_state["rdv_meta"] = {
-                    "tipo": tipo.upper(),
-                    "colaborador_id": colaborador["id"],
+                    "tipo": tipo,
                     "colaborador_nome": colaborador["nome"],
                     "data_inicial": data_inicial,
                     "data_final": data_final,
@@ -786,31 +842,17 @@ def main() -> None:
                         for _, row in df.iterrows():
                             linhas.append(
                                 {
-                                    "DATA": datetime.strptime(
-                                        row["DATA"], "%d/%m/%Y"
-                                    )
-                                    .date()
-                                    .isoformat(),
+                                    "DATA": datetime.strptime(row["DATA"], "%d/%m/%Y").date().isoformat(),
                                     "CIDADE": row.get("CIDADE", ""),
-                                    "HOTEL": row.get("HOTEL")
-                                    if tipo.upper() == "AJUDANTE"
-                                    else None,
-                                    "VALOR_HOTEL": to_float(
-                                        row.get("VALOR_HOTEL", 0)
-                                    )
-                                    if tipo.upper() == "AJUDANTE"
-                                    else None,
-                                    "DIARIA_EM_VIAGEM": to_float(
-                                        row.get("DIARIA_EM_VIAGEM", 0)
-                                    ),
-                                    "TICKET_ALIMENTACAO": to_float(
-                                        row.get("TICKET_ALIMENTACAO", 0)
-                                    ),
+                                    "HOTEL": row.get("HOTEL") if tipo == "AJUDANTE" else None,
+                                    "VALOR_HOTEL": to_float(row.get("VALOR_HOTEL", 0)) if tipo == "AJUDANTE" else None,
+                                    "DIARIA_EM_VIAGEM": to_float(row.get("DIARIA_EM_VIAGEM", 0)),
+                                    "TICKET_ALIMENTACAO": to_float(row.get("TICKET_ALIMENTACAO", 0)),
                                 }
                             )
                         insert_rdv(
-                            colaborador["id"],
-                            tipo.upper(),
+                            colaborador["nome"],
+                            tipo,
                             data_inicial,
                             data_final,
                             adiantamento_flag,
@@ -829,19 +871,17 @@ def main() -> None:
                         df_rows = df.to_dict("records")
                         img_buffer = generate_image(
                             colaborador_nome=colaborador["nome"],
-                            tipo=tipo.upper(),
+                            tipo=tipo,
                             data_inicial=data_inicial,
                             data_final=data_final,
                             adiantamento=adiantamento_flag,
-                            valor_adiantamento=valor_adiantamento
-                            if adiantamento_flag
-                            else 0.0,
+                            valor_adiantamento=valor_adiantamento if adiantamento_flag else 0.0,
                             linhas=df_rows,
                             mostrar_valores=True,
                         )
                         st.session_state["generated_image_data"] = img_buffer.getvalue()
                         st.session_state["generated_image_name"] = (
-                            f"RDV_{colaborador['nome'].replace(' ', '_')}_{tipo.upper()}_"
+                            f"RDV_{colaborador['nome'].replace(' ', '_')}_{tipo}_"
                             f"{data_inicial.strftime('%Y%m%d')}-{data_final.strftime('%Y%m%d')}.png"
                         )
                         st.session_state["generated_image_page"] = page
@@ -849,21 +889,19 @@ def main() -> None:
         else:
             st.session_state["rdv_table"] = None
             st.session_state["rdv_meta"] = {}
-            if st.button(f"Gerar RDVs para todos os {tipo}s"):
-                df_template = build_table_dataframe(tipo.upper(), data_inicial, data_final)
+            if st.button(f"Gerar RDVs para todos os {tipo.lower()}s"):
+                df_template = build_table_dataframe(tipo, data_inicial, data_final)
                 rows_template = df_template.to_dict("records")
                 previews = []
                 for colab in colaboradores_disponiveis:
                     rows_copy = [row.copy() for row in rows_template]
                     img_buffer = generate_image(
                         colaborador_nome=colab["nome"],
-                        tipo=tipo.upper(),
+                        tipo=tipo,
                         data_inicial=data_inicial,
                         data_final=data_final,
                         adiantamento=adiantamento_flag,
-                        valor_adiantamento=valor_adiantamento
-                        if adiantamento_flag
-                        else 0.0,
+                        valor_adiantamento=valor_adiantamento if adiantamento_flag else 0.0,
                         linhas=rows_copy,
                     )
                     previews.append(
@@ -871,20 +909,20 @@ def main() -> None:
                             "nome": colab["nome"],
                             "image": img_buffer.getvalue(),
                             "file_name": (
-                                f"RDV_{colab['nome'].replace(' ', '_')}_{tipo.upper()}_"
+                                f"RDV_{colab['nome'].replace(' ', '_')}_{tipo}_"
                                 f"{data_inicial.strftime('%Y%m%d')}-{data_final.strftime('%Y%m%d')}.png"
                             ),
                         }
                     )
                 st.session_state["batch_previews"] = {
-                    "tipo": tipo.upper(),
+                    "tipo": tipo,
                     "data_inicial": data_inicial,
                     "data_final": data_final,
                     "previews": previews,
                 }
                 st.success(f"Gerados {len(previews)} RDVs para {tipo.lower()}s.")
             batch_data = st.session_state.get("batch_previews", {})
-            if batch_data.get("tipo") == tipo.upper():
+            if batch_data.get("tipo") == tipo:
                 for idx, preview in enumerate(batch_data["previews"]):
                     st.subheader(preview["nome"])
                     st.image(preview["image"], use_container_width=True)
@@ -898,11 +936,10 @@ def main() -> None:
                     if st.button("Imprimir RDV", key=f"batch_print_{tipo}_{idx}"):
                         open_print_window(preview["image"])
                 if batch_data["previews"]:
-                    if st.button(f"Imprimir todos os {tipo}s", key=f"batch_print_all_{tipo}"):
+                    if st.button(f"Imprimir todos os {tipo.lower()}s", key=f"batch_print_all_{tipo}"):
                         open_print_window_batch(
                             [preview["image"] for preview in batch_data["previews"]]
                         )
-
     else:  # Relatórios salvos
         # Listagem e reabertura de RDVs previamente salvos
         st.header("Relatórios salvos")
