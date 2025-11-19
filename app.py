@@ -422,8 +422,8 @@ def generate_image(
     mostrar_valores: bool = False,
 ) -> BytesIO:
     """Build a PNG image version of the RDV."""
-    width, height = 3200, 2000
-    margin = 80
+    width, height = 3508, 2480  # A4 at 300dpi: 3508x2480
+    margin = 60
     img = Image.new("RGB", (width, height), "white")
     draw = ImageDraw.Draw(img)
     title_font = load_font(48, bold=True)
@@ -564,11 +564,7 @@ def generate_image(
         draw.line((right, table_top, right, table_bottom), fill="black", width=2)
 
     # Totals
-    if mostrar_valores:
-        total_amount = format_currency(sum_total(linhas))
-    else:
-        total_amount = "R$ _____________________"
-    total_text = f"TOTAL DA QUINZENA EM R$ -----> {total_amount}"
+    total_text = "TOTAL DA QUINZENA EM R$ -----> R$ _____________________"
     draw.text((table_left, table_bottom + 20), total_text, font=header_font, fill="black")
 
     # Signatures / footer
