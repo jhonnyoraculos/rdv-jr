@@ -476,21 +476,16 @@ def generate_image(
     y_cursor += 60
 
     # Table layout
-    total_table_height = row_height * (total_rows + 1)
-    footer_space = 200
-    available_area = height - margin * 2 - footer_space
-    top_offset = max(0, (available_area - total_table_height) // 2)
-    table_top = y_cursor + top_offset
     table_left = margin
     table_right = width - margin
     table_width = table_right - table_left
     total_rows = max(len(linhas), 1)
-    footer_space = 180
-    max_table_height = height - margin - footer_space
-    available_height = max(0, max_table_height - table_top)
-    row_height = max(36, int(available_height / (total_rows + 1)))
-    row_height = min(row_height, 90)
+    row_height = 60
     total_table_height = row_height * (total_rows + 1)
+    footer_space = 200
+    content_height = total_table_height + footer_space
+    top_offset = max(0, (height - content_height - margin) // 2)
+    table_top = y_cursor + top_offset
     if tipo == "MOTORISTA":
         columns = [
             ("DATA", "DATA", 0.15),
