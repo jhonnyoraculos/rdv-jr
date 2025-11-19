@@ -19,6 +19,13 @@ RESAMPLE_FILTER = (
     Image.Resampling.LANCZOS if hasattr(Image, "Resampling") else Image.ANTIALIAS
 )
 
+DPI = 300
+MM_PER_INCH = 25.4
+A4_WIDTH_MM = 297
+A4_HEIGHT_MM = 210
+A4_WIDTH_PX = int(A4_WIDTH_MM / MM_PER_INCH * DPI)
+A4_HEIGHT_PX = int(A4_HEIGHT_MM / MM_PER_INCH * DPI)
+
 # ==========================
 # CADASTRO FIXO DE COLABORADORES
 # ==========================
@@ -422,82 +429,79 @@ def generate_image(
     mostrar_valores: bool = False,
 ) -> BytesIO:
     """Build a PNG image version of the RDV."""
-    width, height = 3508, 2480  # A4 at 300dpi: 3508x2480
-    margin = 40
+    width, height = A4_WIDTH_PX, A4_HEIGHT_PX
+    margin_x = int(width * 0.03)
+    margin_top = int(height * 0.07)
+    bottom_margin = int(height * 0.05)
+    reserved_footer = int(height * 0.32)
     img = Image.new("RGB", (width, height), "white")
     draw = ImageDraw.Draw(img)
-    title_font = load_font(48, bold=True)
-    header_font = load_font(32, bold=True)
-    regular_font = load_font(28)
-    small_font = load_font(20)
+    title_font = load_font(int(height * 0.024), bold=True)
+    header_font = load_font(int(height * 0.014), bold=True)
+    regular_font = load_font(int(height * 0.012))
+    small_font = load_font(int(height * 0.01))
 
-    # Header with logo and title
-    y_cursor = margin
+    y_cursor = margin_top
     if LOGO_PATH.exists():
         logo = Image.open(LOGO_PATH).convert("RGBA")
-        ratio = min(
-            LOGO_MAX_WIDTH / logo.width,
-            LOGO_MAX_HEIGHT / logo.height,
-            1.0,
-        )
+        ratio = min((width * 0.04) / logo.width, (height * 0.045) / logo.height, 1.0)
         logo_size = (int(logo.width * ratio), int(logo.height * ratio))
         logo = logo.resize(logo_size, resample=RESAMPLE_FILTER)
-        img.paste(logo, (margin, margin), logo)
+        logo_y = margin_top - int(height * 0.025)
+        img.paste(logo, (margin_x, logo_y), logo)
+        y_cursor = max(y_cursor, logo_y + logo_size[1] + int(height * 0.008))
+    else:
+        y_cursor += int(height * 0.008)
     title = (
         "RELATÓRIO DE DESPESAS DE VIAGEM - RDV - MOTORISTA"
         if tipo == "MOTORISTA"
         else "RELATÓRIO DE DESPESAS DE VIAGEM - RDV - AJUDANTE DE MOTORISTA"
     )
-    draw_text_centered(draw, title, width / 2, margin, title_font)
-    y_cursor += 120
+    draw_text_centered(draw, title, width / 2, y_cursor - int(height * 0.05), title_font)
 
-    # Collaborator metadata
+    draw.text((margin_x, y_cursor), f"NOME: {colaborador_nome}", font=regular_font, fill="black")
     draw.text(
-        (margin, y_cursor),
-        f"NOME: {colaborador_nome}",
-        font=regular_font,
-        fill="black",
-    )
-    draw.text(
-        (width * 0.55, y_cursor),
+        (width * 0.52, y_cursor),
         f"DATA QUINZENA (INICIO E FINAL): {format_date_br(data_inicial)} a {format_date_br(data_final)}",
         font=regular_font,
         fill="black",
     )
-    y_cursor += 40
+    y_cursor += int(height * 0.024)
     draw.text(
-        (margin, y_cursor),
-        "HOUVE ADIANTAMENTO DE DIÁRIA? ( ) NÃO ( ) SIM",
+        (margin_x, y_cursor),
+        "HOUVE ADIANTAMENTO DE DIÁRIA? (   ) NÃO (   ) SIM",
         font=regular_font,
         fill="black",
     )
     valor_text = "NO VALOR DE R$ _____________________"
     draw.text((width * 0.6, y_cursor), valor_text, font=regular_font, fill="black")
-    y_cursor += 60
+    y_cursor += int(height * 0.028)
 
-    # Table layout
-    table_left = margin
-    table_right = width - margin
+    table_left = margin_x
+    table_right = width - margin_x
     table_width = table_right - table_left
     total_rows = max(len(linhas), 1)
-    row_height = 60
-    total_table_height = row_height * (total_rows + 1)
-    table_top = y_cursor + 30
+    available_height = height - y_cursor - bottom_margin - reserved_footer
+    row_height = int(available_height / (total_rows + 1)) if available_height > 0 else int(height * 0.02)
+    row_height = max(row_height, int(height * 0.02))
+    row_height = min(row_height, int(height * 0.033))
+    table_top = y_cursor
+
     if tipo == "MOTORISTA":
         columns = [
-            ("DATA", "DATA", 0.15),
-            ("CIDADE", "CIDADE", 0.35),
+            ("DATA", "DATA", 0.17),
+            ("CIDADE", "CIDADE", 0.33),
             ("DIÁRIA EM VIAGEM", "DIARIA_EM_VIAGEM", 0.25),
             ("TICKET ALIMENTAÇÃO", "TICKET_ALIMENTACAO", 0.25),
         ]
     else:
         columns = [
-            ("DATA", "DATA", 0.13),
-            ("CIDADE", "CIDADE", 0.22),
-            ("HOTEL", "HOTEL", 0.25),
+            ("DATA", "DATA", 0.14),
+            ("CIDADE", "CIDADE", 0.2),
+            ("HOTEL", "HOTEL", 0.2),
             ("VALOR HOTEL", "VALOR_HOTEL", 0.12),
-            ("DIÁRIA EM VIAGEM", "DIARIA_EM_VIAGEM", 0.14),
-            ("TICKET ALIMENTAÇÃO", "TICKET_ALIMENTACAO", 0.14),
+            ("DIÁRIA EM VIAGEM", "DIARIA_EM_VIAGEM", 0.17),
+            ("TICKET ALIMENTAÇÃO", "TICKET_ALIMENTACAO", 0.17),
         ]
 
     column_positions: list[tuple[str, str, int, int]] = []
@@ -515,27 +519,19 @@ def generate_image(
         )
 
     table_bottom = table_top + row_height * (total_rows + 1)
-    # table boundary
     draw.rectangle((table_left, table_top, table_right, table_bottom), outline="black", width=2)
 
-    # Header row
     draw.line((table_left, table_top + row_height, table_right, table_top + row_height), fill="black", width=2)
     for header, _, left, right in column_positions:
         draw.line((left, table_top, left, table_bottom), fill="black", width=2)
-        draw.text(
-            (left + 5, table_top + 10),
-            header,
-            font=header_font,
-            fill="black",
-        )
+        draw.text((left + int(width * 0.003), table_top + int(row_height * 0.25)), header, font=header_font, fill="black")
     draw.line((table_right, table_top, table_right, table_bottom), fill="black", width=2)
 
-    # Rows
     for idx, linha in enumerate(linhas):
         y = table_top + row_height * (idx + 1)
         draw.line((table_left, y + row_height, table_right, y + row_height), fill="black", width=1)
         is_domingo = False
-        for header, key, left, right in column_positions:
+        for _, key, left, right in column_positions:
             value = linha.get(key, "")
             if key == "DATA" and value:
                 parsed_date = try_parse_date(value)
@@ -554,76 +550,43 @@ def generate_image(
                     text = ""
             else:
                 text = str(value) if value not in (None, "") else ""
-            draw.text((left + 5, y + 10), text, font=regular_font, fill="black")
+            draw.text((left + int(width * 0.003), y + int(row_height * 0.2)), text, font=regular_font, fill="black")
         if is_domingo:
-            draw.line(
-                (table_left, y + row_height / 2, table_right, y + row_height / 2),
-                fill="black",
-                width=1,
-            )
+            draw.line((table_left, y + row_height / 2, table_right, y + row_height / 2), fill="black", width=1)
     for _, _, _, right in column_positions:
         draw.line((right, table_top, right, table_bottom), fill="black", width=2)
 
-    # Totals
     total_text = "TOTAL DA QUINZENA EM R$ -----> R$ _____________________"
-    total_y = table_bottom + 20
+    total_y = table_bottom + int(height * 0.012)
     draw.text((table_left, total_y), total_text, font=header_font, fill="black")
 
-    # Local/data row
-    loc_y = total_y + 80
-    draw.text(
-        (margin, loc_y),
-        "LOCAL/DATA: ________________________________",
-        font=regular_font,
-        fill="black",
-    )
-    draw.text(
-        (width * 0.65, loc_y),
-        "_____/_____/______",
-        font=regular_font,
-        fill="black",
-    )
+    loc_y = total_y + int(height * 0.028)
+    draw.text((margin_x, loc_y), "LOCAL/DATA: ________________________________", font=regular_font, fill="black")
+    date_y = loc_y + int(height * 0.02)
+    draw.text((margin_x, date_y), ", _____________________  de  _____________________  de  __________", font=regular_font, fill="black")
 
-    # Signatures / footer
-    sign_label_y = loc_y + 90
-    signature_width = (width - 2 * margin) / 3
-    max_line_width = signature_width - 20
-    for idx, text in enumerate(
-        ["ASSINATURA COLABORADOR", "ANALISTA FROTA", "GESTOR FROTA"]
-    ):
-        x = margin + idx * signature_width
+    sign_label_y = date_y + int(height * 0.05)
+    signature_width = (width - 2 * margin_x) / 3
+    max_line_width = signature_width - int(width * 0.02)
+    for idx, text in enumerate(["ASSINATURA COLABORADOR", "ANALISTA FROTA", "GESTOR FROTA"]):
+        x = margin_x + idx * signature_width
         draw.text((x + 10, sign_label_y), text, font=regular_font, fill="black")
-        draw.line(
-            (x + 5, sign_label_y + 70, x + 5 + max_line_width, sign_label_y + 70),
-            fill="black",
-            width=2,
-        )
+        line_y = sign_label_y + int(height * 0.055)
+        draw.line((x + 5, line_y, x + 5 + max_line_width, line_y), fill="black", width=2)
 
-    # Observação
     obs_text = (
         "OBSERVAÇÃO: Nos termos da Convenção Coletiva a diária de viagem é destinada apenas ao colaborador "
         "que exercer atividade fora da base considerando cada período modular de 24 horas, o recebimento da diária "
         "exclui-se o pagamento da ajuda de alimentação (Ticket)."
     )
-    obs_y = sign_label_y + 130
-    obs_line_height = (
-        getattr(small_font, "size", 24) + 8
-        if hasattr(small_font, "size")
-        else 32
-    )
-    draw_wrapped_text(
-        draw,
-        obs_text,
-        margin,
-        obs_y,
-        small_font,
-        width - 2 * margin,
-        obs_line_height,
-    )
+    obs_y = sign_label_y + int(height * 0.085)
+    obs_line_height = getattr(small_font, "size", 18) + 4 if hasattr(small_font, "size") else 22
+    draw_wrapped_text(draw, obs_text, margin_x, obs_y, small_font, width - 2 * margin_x, obs_line_height)
     buffer = BytesIO()
-    img.save(buffer, format="PNG")
+    img.save(buffer, format="PNG", dpi=(DPI, DPI))
     buffer.seek(0)
     return buffer
+
 
 
 def sum_total(rows: list[dict]) -> float:
@@ -685,7 +648,7 @@ def open_print_window_batch(images: list[bytes]) -> None:
 def _open_print_window(images: list[bytes]) -> None:
     encoded_images = [base64.b64encode(img).decode("ascii") for img in images]
     imgs_markup = "".join(
-        f'<div class="page"><img src="data:image/png;base64,{encoded}" /></div>'
+        f'<div class="rdv-wrapper"><img src="data:image/png;base64,{encoded}" /></div>'
         for encoded in encoded_images
     )
     components.html(
@@ -712,13 +675,21 @@ def _open_print_window(images: list[bytes]) -> None:
                                 body {{
                                     background: #ffffff;
                                 }}
-                                .page {{
+                                .rdv-wrapper {{
                                     width: 100%;
+                                    height: 100vh;
+                                    display: flex;
+                                    align-items: center;
+                                    justify-content: center;
                                     page-break-after: always;
                                 }}
-                                img {{
+                                .rdv-wrapper:last-child {{
+                                    page-break-after: auto;
+                                }}
+                                .rdv-wrapper img {{
                                     width: 100%;
-                                    height: auto;
+                                    height: 100%;
+                                    object-fit: contain;
                                     display: block;
                                 }}
                             </style>
