@@ -566,32 +566,35 @@ def generate_image(
 
     # Totals
     total_text = "TOTAL DA QUINZENA EM R$ -----> R$ _____________________"
-    draw.text((table_left, table_bottom + 20), total_text, font=header_font, fill="black")
+    total_y = table_bottom + 20
+    draw.text((table_left, total_y), total_text, font=header_font, fill="black")
 
-    # Signatures / footer
-    footer_top = table_bottom + 60
+    # Local/data row
+    loc_y = total_y + 50
     draw.text(
-        (margin, footer_top),
+        (margin, loc_y),
         "LOCAL/DATA: ________________________________",
         font=regular_font,
         fill="black",
     )
     draw.text(
-        (width * 0.65, footer_top),
+        (width * 0.65, loc_y),
         "_____/_____/______",
         font=regular_font,
         fill="black",
     )
-    footer_y = footer_top + 40
+
+    # Signatures / footer
+    sign_label_y = loc_y + 60
     signature_width = (width - 2 * margin) / 3
     max_line_width = signature_width - 20
     for idx, text in enumerate(
         ["ASSINATURA COLABORADOR", "ANALISTA FROTA", "GESTOR FROTA"]
     ):
         x = margin + idx * signature_width
-        draw.text((x + 10, footer_y), text, font=regular_font, fill="black")
+        draw.text((x + 10, sign_label_y), text, font=regular_font, fill="black")
         draw.line(
-            (x + 5, footer_y + 55, x + 5 + max_line_width, footer_y + 55),
+            (x + 5, sign_label_y + 50, x + 5 + max_line_width, sign_label_y + 50),
             fill="black",
             width=2,
         )
@@ -602,7 +605,7 @@ def generate_image(
         "que exercer atividade fora da base considerando cada período modular de 24 horas, o recebimento da diária "
         "exclui-se o pagamento da ajuda de alimentação (Ticket)."
     )
-    obs_y = footer_y + 60
+    obs_y = sign_label_y + 90
     obs_line_height = (
         getattr(small_font, "size", 24) + 8
         if hasattr(small_font, "size")
