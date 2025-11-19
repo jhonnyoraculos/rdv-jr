@@ -485,6 +485,7 @@ def generate_image(
     footer_space = 200
     content_height = total_table_height + footer_space
     top_offset = max(0, (height - content_height - margin) // 2)
+    top_offset = min(top_offset, 80)
     table_top = y_cursor + top_offset
     if tipo == "MOTORISTA":
         columns = [
