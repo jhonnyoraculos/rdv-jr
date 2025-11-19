@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+rdv.db
+.DS_Store
+*.log
+streamlit_app.py
