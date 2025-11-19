@@ -570,7 +570,7 @@ def generate_image(
     draw.text((table_left, total_y), total_text, font=header_font, fill="black")
 
     # Local/data row
-    loc_y = total_y + 50
+    loc_y = total_y + 60
     draw.text(
         (margin, loc_y),
         "LOCAL/DATA: ________________________________",
@@ -585,7 +585,7 @@ def generate_image(
     )
 
     # Signatures / footer
-    sign_label_y = loc_y + 60
+    sign_label_y = loc_y + 70
     signature_width = (width - 2 * margin) / 3
     max_line_width = signature_width - 20
     for idx, text in enumerate(
@@ -594,7 +594,7 @@ def generate_image(
         x = margin + idx * signature_width
         draw.text((x + 10, sign_label_y), text, font=regular_font, fill="black")
         draw.line(
-            (x + 5, sign_label_y + 50, x + 5 + max_line_width, sign_label_y + 50),
+            (x + 5, sign_label_y + 60, x + 5 + max_line_width, sign_label_y + 60),
             fill="black",
             width=2,
         )
@@ -605,7 +605,7 @@ def generate_image(
         "que exercer atividade fora da base considerando cada período modular de 24 horas, o recebimento da diária "
         "exclui-se o pagamento da ajuda de alimentação (Ticket)."
     )
-    obs_y = sign_label_y + 90
+    obs_y = sign_label_y + 110
     obs_line_height = (
         getattr(small_font, "size", 24) + 8
         if hasattr(small_font, "size")
