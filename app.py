@@ -482,11 +482,7 @@ def generate_image(
     total_rows = max(len(linhas), 1)
     row_height = 60
     total_table_height = row_height * (total_rows + 1)
-    footer_space = 200
-    content_height = total_table_height + footer_space
-    top_offset = max(0, (height - content_height - margin) // 2)
-    top_offset = min(top_offset, 80)
-    table_top = y_cursor + top_offset
+    table_top = y_cursor + 30
     if tipo == "MOTORISTA":
         columns = [
             ("DATA", "DATA", 0.15),
@@ -586,7 +582,7 @@ def generate_image(
         font=regular_font,
         fill="black",
     )
-    footer_y = footer_top + 60
+    footer_y = footer_top + 40
     signature_width = (width - 2 * margin) / 3
     max_line_width = signature_width - 20
     for idx, text in enumerate(
@@ -595,7 +591,7 @@ def generate_image(
         x = margin + idx * signature_width
         draw.text((x + 10, footer_y), text, font=regular_font, fill="black")
         draw.line(
-            (x + 5, footer_y + 90, x + 5 + max_line_width, footer_y + 90),
+            (x + 5, footer_y + 55, x + 5 + max_line_width, footer_y + 55),
             fill="black",
             width=2,
         )
