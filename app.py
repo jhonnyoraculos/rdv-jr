@@ -760,7 +760,14 @@ def main() -> None:
     """Primary Streamlit app logic, with sidebar navigation."""
     ensure_session_state()
     init_db()
-    st.title("Relatório de Despesas de Viagem – RDV JR")
+    logo_col, title_col = st.columns([1, 5])
+    with logo_col:
+        if LOGO_PATH.exists():
+            st.image(LOGO_PATH, width=130)
+        else:
+            st.markdown("JR")
+    with title_col:
+        st.title("Relatório de Despesas de Viagem – RDV JR")
     page = st.sidebar.selectbox(
         "Menu", ["Novo RDV", "Relatórios salvos"]
     )
