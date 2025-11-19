@@ -763,7 +763,7 @@ def main() -> None:
     logo_col, title_col = st.columns([1, 5])
     with logo_col:
         if LOGO_PATH.exists():
-            st.image(LOGO_PATH, width=130)
+            st.image(LOGO_PATH, width=80)
         else:
             st.markdown("JR")
     with title_col:
