@@ -490,6 +490,7 @@ def generate_image(
     available_height = max(0, max_table_height - table_top)
     row_height = max(36, int(available_height / (total_rows + 1)))
     row_height = min(row_height, 90)
+    total_table_height = row_height * (total_rows + 1)
     if tipo == "MOTORISTA":
         columns = [
             ("DATA", "DATA", 0.15),
