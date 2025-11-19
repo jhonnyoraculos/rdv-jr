@@ -476,7 +476,11 @@ def generate_image(
     y_cursor += 60
 
     # Table layout
-    table_top = y_cursor
+    total_table_height = row_height * (total_rows + 1)
+    footer_space = 200
+    available_area = height - margin * 2 - footer_space
+    top_offset = max(0, (available_area - total_table_height) // 2)
+    table_top = y_cursor + top_offset
     table_left = margin
     table_right = width - margin
     table_width = table_right - table_left
