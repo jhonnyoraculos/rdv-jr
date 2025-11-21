@@ -172,6 +172,13 @@ def get_default_quinzena() -> tuple[date, date]:
     """Return default quinzena anchored on next available Monday."""
     fallback_start = date(2025, 11, 10)
     duration = timedelta(days=12)
+    today = date.today()
+
+    def next_monday(value: date) -> date:
+        while value.weekday() != 0:  # 0 = Monday
+            value += timedelta(days=1)
+        return value
+
     with get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT data_final FROM rdv ORDER BY id DESC LIMIT 1")
@@ -184,9 +191,15 @@ def get_default_quinzena() -> tuple[date, date]:
             candidate = fallback_start
     else:
         candidate = fallback_start
-    while candidate.weekday() != 0:  # 0 = Monday
-        candidate += timedelta(days=1)
-    return candidate, candidate + duration
+    candidate = next_monday(candidate)
+    end_date = candidate + duration
+    if today < candidate:
+        return candidate, end_date
+
+    while today > end_date:
+        candidate = next_monday(end_date + timedelta(days=1))
+        end_date = candidate + duration
+    return candidate, end_date
 
 
 def insert_rdv(
