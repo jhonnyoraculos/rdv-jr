@@ -54,7 +54,6 @@ COLABORADORES = [
     {"nome": "MATHEUS RINALDO PEREIRA VAZ", "tipo": "MOTORISTA"},
     {"nome": "PAULO ROGERIO GONÇALVES AZEVEDO", "tipo": "MOTORISTA"},
     {"nome": "PEDRO AMARAL E SILVA", "tipo": "MOTORISTA"},
-    {"nome": "RAYNER FRANCIS LOPES DE ALMEIDA", "tipo": "MOTORISTA"},
     {"nome": "REGINALDO MOREIRA LÃO", "tipo": "MOTORISTA"},
     {"nome": "RICARDO DE OLIVEIRA SILVA", "tipo": "MOTORISTA"},
     {"nome": "RONALDO PEREIRA CORDEIRO", "tipo": "MOTORISTA"},
