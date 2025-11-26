@@ -818,7 +818,7 @@ def pagina_colaboradores() -> None:
         else:
             neon_insert_colaborador(nome_novo, tipo_novo)
             st.success("Colaborador salvo.")
-            st.experimental_rerun()
+            st.rerun()
 
     colabs = get_all_colaboradores()
     if not colabs:
@@ -832,15 +832,15 @@ def pagina_colaboradores() -> None:
     novo_tipo = st.selectbox("Tipo", TIPOS_COLABORADOR, index=TIPOS_COLABORADOR.index(csel.get("tipo", "MOTORISTA")), key="edit_tipo")
     cols_btn = st.columns(2)
     with cols_btn[0]:
-        if st.button("Atualizar", disabled=not neon_ok):
-            neon_update_colaborador(int(csel.get("id", 0)), novo_nome, novo_tipo)
-            st.success("Atualizado.")
-            st.experimental_rerun()
+            if st.button("Atualizar", disabled=not neon_ok):
+                neon_update_colaborador(int(csel.get("id", 0)), novo_nome, novo_tipo)
+                st.success("Atualizado.")
+                st.rerun()
     with cols_btn[1]:
         if st.button("Excluir", disabled=not neon_ok):
             neon_delete_colaborador(int(csel.get("id", 0)))
             st.warning("Excluido.")
-            st.experimental_rerun()
+            st.rerun()
 
     st.subheader("Lista")
     st.dataframe(pd.DataFrame(colabs), use_container_width=True)
