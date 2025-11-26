@@ -37,75 +37,8 @@ neon_USER = os.getenv("NEON_USER")
 neon_PASSWORD = os.getenv("NEON_PASSWORD")
 neon_DB = os.getenv("NEON_DB")
 
-# Fallback apenas para exibir caso o neon nao esteja configurado
-COLABORADORES_SEED = [
-    # Motoristas
-    "ALDEMIR LUIZ DA SILVA",
-    "ANDRE LUIZ",
-    "CELSO ANTONIO CAETANO",
-    "CRISTIANO CLEMENTINO OLIVEIRA",
-    "DIEGO GERALDO BAZILIO",
-    "DOUGLAS ALBERTINO GREGORIO",
-    "DOUGLAS RODRIGUES DE OLIVEIRA",
-    "FRANCES FRANCO",
-    "FRANCIS EDER NUNES",
-    "FREDER HENRIQUE MOREIRA DE CARVALHO",
-    "GABRIEL FELIPE DE FARIA OLIVEIRA",
-    "GERALDO FERNANDO DA SILVA",
-    "GUILHERME FLAVIO DOS SANTOS",
-    "HELIO APARECIDO CANEDO",
-    "HIPOCRATES HERSCHEL PINTO",
-    "IAGO RAIMUNDO DIAS",
-    "JOSE ARILDO DOMINGOS",
-    "KAIO FERNANDO",
-    "LUCAS APARECIDO ROQUE",
-    "LUCAS SILVA NOGUEIRA",
-    "MATEUS SEVERINO DE SOUZA",
-    "MATHEUS RINALDO PEREIRA VAZ",
-    "PAULO ROGERIO GONCALVES AZEVEDO",
-    "PEDRO AMARAL E SILVA",
-    "REGINALDO MOREIRA LAO",
-    "RICARDO DE OLIVEIRA SOUSA",
-    "RONALDO PEREIRA CORDEIRO",
-    "SIDNEY RAIMUNDO DA SILVA",
-    "WESLEY ANTONIO SENA DA SILVA",
-    "WESLEY LUCIO",
-    # Ajudantes
-    "ANDRE LUIS GONCALVES PEREIRA",
-    "BRUNO HENRIQUE MENDES",
-    "CHARLES COSTA SANTOS",
-    "DEVIS PENA DE OLIVEIRA",
-    "EDER SILVA",
-    "EDUARDO ANDRADE SILVA",
-    "ELDERSON JOSE GOMES",
-    "EMERSON FELIPE MACHADO",
-    "ERASMO ROBERTO LOPES GONCALVES",
-    "FABRICIO DA SILVA SOUSA",
-    "HIAGO HENRIQUE LOPES",
-    "JOAO HELIO SILVA LACERDA",
-    "KENEDY DEIVISSIN LOPES PEREIRA",
-    "LAENDER LOURENCO DA SILVA",
-    "LUCAS GABRIEL DA SILVA",
-    "LUIS EDUARDO CUSTODIO COELHO",
-    "MARCELO DA CONCEICAO SANTOS",
-    "MARCOS PAULO MILAGRES DA SILVA",
-    "MARLON GERALDO ALVES SILVA",
-    "MAYCOLL LUCAS MENDES DA SILVA",
-    "ORMIR GONCALVES BORGES",
-    "PABLO HENRIQUE NOGUEIRA GONTIJO",
-    "REGINALDO LAURO SANTOS ABREU",
-    "RICHARD SANTOS LOPES",
-    "ROBERT JHONATHAN SILVA",
-    "RUAN CARLOS DIAS FRANCO DA SILVA",
-    "RYCHARD MARTINS DA SILVA",
-    "WELLINGTON GUSTAVO SANTOS",
-    "WEVERSON FERREIRA DOS SANTOS",
-]
-
-# Fallback apenas para exibir caso o neon nao esteja configurado
-COLABORADORES_FALLBACK = [
-    {"nome": nome, "tipo": "MOTORISTA"} for nome in COLABORADORES_SEED[:30]
-] + [{"nome": nome, "tipo": "AJUDANTE"} for nome in COLABORADORES_SEED[30:]]
+# Fallback vazio caso Neon não esteja configurado
+COLABORADORES_FALLBACK: list[dict] = []
 
 TIPOS_COLABORADOR = ["MOTORISTA", "AJUDANTE"]
 
@@ -297,17 +230,6 @@ def init_neon_db() -> None:
                 """
             )
             cur.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_colaboradores_nome_tipo ON colaboradores(nome, tipo)")
-            # semear base
-            for nome in COLABORADORES_SEED:
-                tipo = "MOTORISTA" if nome in COLABORADORES_SEED[:30] else "AJUDANTE"
-                cur.execute(
-                    """
-                    INSERT INTO colaboradores (nome, tipo)
-                    VALUES (%s, %s)
-                    ON CONFLICT (nome, tipo) DO NOTHING
-                    """,
-                    (nome, tipo),
-                )
     conn.close()
 
 
