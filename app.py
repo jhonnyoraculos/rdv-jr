@@ -672,31 +672,35 @@ def ensure_session_state() -> None:
 
 
 def get_default_quinzena() -> tuple[date, date]:
+    """Retorna a quinzena padrão, alinhada a blocos de 13 dias a partir de 24/11/2025."""
     duration = timedelta(days=12)  # 13 dias incluindo início/fim
     today = date.today()
+    anchor = date(2025, 11, 24)  # segunda-feira inicial desejada
 
     def next_monday_on_or_after(d: date) -> date:
         while d.weekday() != 0:  # 0 = segunda
             d += timedelta(days=1)
         return d
 
-    # Ponto de partida: próxima segunda-feira a partir de hoje
-    candidate = next_monday_on_or_after(today)
-
-    # Se houver RDV salvo e o último fim for maior/igual ao candidato,
-    # pulamos para a próxima segunda após o último fim para evitar sobreposição.
+    # Se já houver RDV, continuamos a partir do último fim registrado.
     with get_connection() as conn:
         cur = conn.cursor()
         cur.execute("SELECT data_final FROM rdv ORDER BY id DESC LIMIT 1")
         last = cur.fetchone()
+
     if last:
         try:
             last_final = datetime.fromisoformat(last[0]).date()
-            if last_final >= candidate:
-                candidate = next_monday_on_or_after(last_final + timedelta(days=1))
+            candidate = next_monday_on_or_after(last_final + timedelta(days=1))
+            return candidate, candidate + duration
         except Exception:
             pass
 
+    # Sem RDV salvo: usar períodos contínuos de 13 dias a partir do anchor.
+    candidate = anchor
+    if today > anchor:
+        while today > candidate + duration:
+            candidate += timedelta(days=13)
     end = candidate + duration
     return candidate, end
 
