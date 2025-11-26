@@ -1,24 +1,27 @@
+
+import base64
 import math
+import os
 import sqlite3
 from datetime import date, datetime, timedelta
 from io import BytesIO
 from pathlib import Path
+from typing import Optional
 
-import base64
 import pandas as pd
+import psycopg2
+import psycopg2.extras
 import streamlit as st
 import streamlit.components.v1 as components
 from PIL import Image, ImageDraw, ImageFont
 
+# Caminhos e constantes
 BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = BASE_DIR / "rdv.db"
 LOGO_PATH = BASE_DIR / "logo-jr.png"
-LOGO_MAX_WIDTH = 200
-LOGO_MAX_HEIGHT = 160
-RESAMPLE_FILTER = (
-    Image.Resampling.LANCZOS if hasattr(Image, "Resampling") else Image.ANTIALIAS
-)
+RESAMPLE_FILTER = Image.Resampling.LANCZOS if hasattr(Image, "Resampling") else Image.ANTIALIAS
 
+# A4 em paisagem @300dpi
 DPI = 300
 MM_PER_INCH = 25.4
 A4_WIDTH_MM = 297
@@ -26,97 +29,39 @@ A4_HEIGHT_MM = 210
 A4_WIDTH_PX = int(A4_WIDTH_MM / MM_PER_INCH * DPI)
 A4_HEIGHT_PX = int(A4_HEIGHT_MM / MM_PER_INCH * DPI)
 
-# ==========================
-# CADASTRO FIXO DE COLABORADORES
-# ==========================
-COLABORADORES = [
-    # Motoristas
-    {"nome": "ALDEMIR LUIZ DA SILVA", "tipo": "MOTORISTA"},
-    {"nome": "ANDRE LUIZ", "tipo": "MOTORISTA"},
-    {"nome": "CELSO ANTONIO CAETANO", "tipo": "MOTORISTA"},
-    {"nome": "CRISTIANO CLEMENTINO OLIVEIRA", "tipo": "MOTORISTA"},
-    {"nome": "DIEGO GERALDO BAZILIO", "tipo": "MOTORISTA"},
-    {"nome": "DOUGLAS ALBERTINO GREGORIO", "tipo": "MOTORISTA"},
-    {"nome": "DOUGLAS RODRIGUES DE OLIVEIRA", "tipo": "MOTORISTA"},
-    {"nome": "FRANCES FRANCO", "tipo": "MOTORISTA"},
-    {"nome": "FRANCIS EDER NUNES", "tipo": "MOTORISTA"},
-    {"nome": "FREDER HENRIQUE MOREIRA DE CARVALHO", "tipo": "MOTORISTA"},
-    {"nome": "GABRIEL FELIPE DE FARIA OLIVEIRA", "tipo": "MOTORISTA"},
-    {"nome": "GERALDO FERNANDO DA SILVA", "tipo": "MOTORISTA"},
-    {"nome": "GUILHERME FLAVIO DOS SANTOS", "tipo": "MOTORISTA"},
-    {"nome": "HIPOCRATES HERSCHEL PINTO", "tipo": "MOTORISTA"},
-    {"nome": "IAGO RAIMUNDO DIAS", "tipo": "MOTORISTA"},
-    {"nome": "JOSE ARILDO DOMINGOS", "tipo": "MOTORISTA"},
-    {"nome": "KAIO FERNANDO", "tipo": "MOTORISTA"},
-    {"nome": "LUCAS APARECIDO ROQUE", "tipo": "MOTORISTA"},
-    {"nome": "LUCAS SILVA NOGUEIRA", "tipo": "MOTORISTA"},
-    {"nome": "MATEUS SEVERINO DE SOUZA", "tipo": "MOTORISTA"},
-    {"nome": "MATHEUS RINALDO PEREIRA VAZ", "tipo": "MOTORISTA"},
-    {"nome": "PAULO ROGERIO GONÇALVES AZEVEDO", "tipo": "MOTORISTA"},
-    {"nome": "PEDRO AMARAL E SILVA", "tipo": "MOTORISTA"},
-    {"nome": "REGINALDO MOREIRA LÃO", "tipo": "MOTORISTA"},
-    {"nome": "RICARDO DE OLIVEIRA SILVA", "tipo": "MOTORISTA"},
-    {"nome": "RONALDO PEREIRA CORDEIRO", "tipo": "MOTORISTA"},
-    {"nome": "SIDNEY RAIMUNDO DA SILVA", "tipo": "MOTORISTA"},
-    {"nome": "WESLEY ANTONIO SENA DA SILVA", "tipo": "MOTORISTA"},
-    {"nome": "WESLEY LUCIO", "tipo": "MOTORISTA"},
-    {"nome": "HELIO APARECIDO CANEDO", "tipo": "MOTORISTA"},
+# Config Neon/Postgres - sempre usa este banco (pode sobrescrever via NEON_DATABASE_URL)
+DEFAULT_NEON_URL = "postgresql://neondb_owner:npg_M4mWIzXsPa9Y@ep-dark-fire-ac4gzhg1-pooler.sa-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
+neon_URL = os.getenv("NEON_DATABASE_URL", DEFAULT_NEON_URL)
+neon_HOST = os.getenv("NEON_HOST")
+neon_USER = os.getenv("NEON_USER")
+neon_PASSWORD = os.getenv("NEON_PASSWORD")
+neon_DB = os.getenv("NEON_DB")
 
-    # Ajudantes
-    {"nome": "ANDRE LUIS GONÇALVES PEREIRA", "tipo": "AJUDANTE"},
-    {"nome": "BRUNO HENRIQUE MENDES", "tipo": "AJUDANTE"},
-    {"nome": "CHARLES COSTA SANTOS", "tipo": "AJUDANTE"},
-    {"nome": "DEVIS PENA DE OLIVEIRA", "tipo": "AJUDANTE"},
-    {"nome": "EDER SILVA", "tipo": "AJUDANTE"},
-    {"nome": "EDUARDO ANDRADE SILVA", "tipo": "AJUDANTE"},
+# Fallback apenas para exibir caso o neon nao esteja configurado
+COLABORADORES_FALLBACK = [
+    {"nome": "ALDEMIR LUIZ DA SILVA", "tipo": "MOTORISTA"},
+    {"nome": "HELIO APARECIDO CANEDO", "tipo": "MOTORISTA"},
     {"nome": "ELDERSON JOSE GOMES", "tipo": "AJUDANTE"},
-    {"nome": "EMERSON FELIPE MACHADO", "tipo": "AJUDANTE"},
-    {"nome": "ERASMO ROBERTO LOPES GONÇALVES", "tipo": "AJUDANTE"},
-    {"nome": "FABRICIO DA SILVA SOUSA", "tipo": "AJUDANTE"},
-    {"nome": "HIAGO HENRIQUE LOPES", "tipo": "AJUDANTE"},
-    {"nome": "JOAO HELIO SILVA LACERDA", "tipo": "AJUDANTE"},
-    {"nome": "KENEDY DEIVISON LOPES PEREIRA", "tipo": "AJUDANTE"},
-    {"nome": "LAENDER LOURENÇO DA SILVA", "tipo": "AJUDANTE"},
-    {"nome": "LUCAS GABRIEL DA SILVA", "tipo": "AJUDANTE"},
-    {"nome": "LUIS EDUARDO CUSTODIO COELHO", "tipo": "AJUDANTE"},
-    {"nome": "MARCELO DA CONCEIÇÃO SANTOS", "tipo": "AJUDANTE"},
-    {"nome": "MARCOS PAULO MILAGRES DA SILVA", "tipo": "AJUDANTE"},
-    {"nome": "MARLON GERALDO ALVES SILVA", "tipo": "AJUDANTE"},
-    {"nome": "MAYCOL LUCAS MENDES DA SILVA", "tipo": "AJUDANTE"},
-    {"nome": "ORMIR GONÇALVES BORGES", "tipo": "AJUDANTE"},
-    {"nome": "PABLO HENRIQUE NOGUEIRA GONTIJO", "tipo": "AJUDANTE"},
-    {"nome": "REGINALDO LAURO SANTOS ABREU", "tipo": "AJUDANTE"},
-    {"nome": "RICHARD SANTOS LOPES", "tipo": "AJUDANTE"},
-    {"nome": "ROBERT JHONATHAN SILVA", "tipo": "AJUDANTE"},
-    {"nome": "RUAN CARLOS DIAS FRANCO DA SILVA", "tipo": "AJUDANTE"},
-    {"nome": "RYCHARD MARTINS DA SILVA", "tipo": "AJUDANTE"},
-    {"nome": "WELLINGTON GUSTAVO SANTOS", "tipo": "AJUDANTE"},
-    {"nome": "WEVERSON FERREIRA DOS SANTOS", "tipo": "AJUDANTE"},
+    {"nome": "BRUNO HENRIQUE MENDES", "tipo": "AJUDANTE"},
 ]
 
 TIPOS_COLABORADOR = ["MOTORISTA", "AJUDANTE"]
 
-
-def listar_colaboradores_por_tipo(tipo: str) -> list[dict]:
-    """Retorna apenas os colaboradores do tipo informado."""
-    return [c for c in COLABORADORES if c["tipo"] == tipo]
-
-
 st.set_page_config(page_title="RDV JR", layout="wide")
+
+# -------------------- SQLite RDV --------------------
 
 
 def get_connection() -> sqlite3.Connection:
-    """Return a connection to the local SQLite database."""
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     conn.execute("PRAGMA foreign_keys = 1;")
     return conn
 
 
 def init_db() -> None:
-    """Create RDV tables if they do not already exist."""
     with get_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute(
+        cur = conn.cursor()
+        cur.execute(
             """
             CREATE TABLE IF NOT EXISTS rdv (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -126,12 +71,11 @@ def init_db() -> None:
                 data_final TEXT NOT NULL,
                 adiantamento INTEGER NOT NULL,
                 valor_adiantamento REAL NOT NULL,
-                total_quinzena REAL NOT NULL,
-                colaborador_id INTEGER
+                total_quinzena REAL NOT NULL
             )
             """
         )
-        cursor.execute(
+        cur.execute(
             """
             CREATE TABLE IF NOT EXISTS rdv_linhas (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -146,61 +90,6 @@ def init_db() -> None:
             )
             """
         )
-        cursor.execute("PRAGMA table_info(rdv)")
-        rdv_columns = [col[1] for col in cursor.fetchall()]
-        if "colaborador_nome" not in rdv_columns:
-            cursor.execute("ALTER TABLE rdv ADD COLUMN colaborador_nome TEXT NOT NULL DEFAULT ''")
-            rdv_columns.append("colaborador_nome")
-        if "colaborador_id" not in rdv_columns:
-            cursor.execute("ALTER TABLE rdv ADD COLUMN colaborador_id INTEGER")
-            rdv_columns.append("colaborador_id")
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
-        existing_tables = [row[0] for row in cursor.fetchall()]
-        if "colaboradores" in existing_tables:
-            cursor.execute(
-                """
-                UPDATE rdv
-                SET colaborador_nome = (
-                    SELECT nome FROM colaboradores WHERE colaboradores.id = rdv.colaborador_id
-                )
-                WHERE colaborador_nome = ''
-                """
-            )
-
-
-def get_default_quinzena() -> tuple[date, date]:
-    """Return default quinzena anchored on next available Monday."""
-    fallback_start = date(2025, 11, 10)
-    duration = timedelta(days=12)
-    today = date.today()
-
-    def next_monday(value: date) -> date:
-        while value.weekday() != 0:  # 0 = Monday
-            value += timedelta(days=1)
-        return value
-
-    with get_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT data_final FROM rdv ORDER BY id DESC LIMIT 1")
-        last = cursor.fetchone()
-    if last:
-        try:
-            last_final = datetime.fromisoformat(last[0]).date()
-            candidate = last_final + timedelta(days=1)
-        except Exception:
-            candidate = fallback_start
-    else:
-        candidate = fallback_start
-    candidate = next_monday(candidate)
-    end_date = candidate + duration
-    if today < candidate:
-        return candidate, end_date
-
-    while today > end_date:
-        candidate = next_monday(end_date + timedelta(days=1))
-        end_date = candidate + duration
-    return candidate, end_date
-
 
 def insert_rdv(
     colaborador_nome: str,
@@ -212,10 +101,9 @@ def insert_rdv(
     total_quinzena: float,
     linhas: list[dict],
 ) -> None:
-    """Persist an RDV header and its lines into the database."""
     with get_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute(
+        cur = conn.cursor()
+        cur.execute(
             """
             INSERT INTO rdv (
                 colaborador_nome, tipo, data_inicial, data_final,
@@ -232,71 +120,62 @@ def insert_rdv(
                 total_quinzena,
             ),
         )
-        rdv_id = cursor.lastrowid
-        linha_values = []
+        rdv_id = cur.lastrowid
+        valores = []
         for linha in linhas:
-            linha_values.append(
+            valores.append(
                 (
                     rdv_id,
                     linha["DATA"],
                     linha.get("CIDADE") or "",
                     linha.get("HOTEL"),
-                    linha.get("VALOR_HOTEL") or None,
+                    linha.get("VALOR_HOTEL"),
                     linha.get("DIARIA_EM_VIAGEM") or 0,
                     linha.get("TICKET_ALIMENTACAO") or 0,
                 )
             )
-        cursor.executemany(
+        cur.executemany(
             """
             INSERT INTO rdv_linhas (
                 rdv_id, data, cidade, hotel, valor_hotel, diaria_viagem, ticket_alimentacao
             ) VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
-            linha_values,
+            valores,
         )
         conn.commit()
 
 
 def get_rdvs() -> list[dict]:
-    """Return saved RDVs with collaborator metadata."""
     with get_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute(
+        cur = conn.cursor()
+        cur.execute(
             """
-            SELECT
-                id,
-                colaborador_nome,
-                tipo,
-                data_inicial,
-                data_final,
-                adiantamento,
-                valor_adiantamento,
-                total_quinzena
+            SELECT id, colaborador_nome, tipo, data_inicial, data_final,
+                   adiantamento, valor_adiantamento, total_quinzena
             FROM rdv
             ORDER BY id DESC
             """
         )
-        rows = cursor.fetchall()
+        rows = cur.fetchall()
     return [
         {
-            "id": row[0],
-            "nome": row[1],
-            "tipo": row[2],
-            "data_inicial": row[3],
-            "data_final": row[4],
-            "adiantamento": bool(row[5]),
-            "valor_adiantamento": row[6],
-            "total_quinzena": row[7],
+            "id": r[0],
+            "nome": r[1],
+            "tipo": r[2],
+            "data_inicial": r[3],
+            "data_final": r[4],
+            "adiantamento": bool(r[5]),
+            "valor_adiantamento": r[6],
+            "total_quinzena": r[7],
         }
-        for row in rows
+        for r in rows
     ]
 
 
 def get_rdv_linhas(rdv_id: int) -> list[dict]:
-    """Return the lines that belong to a saved RDV."""
     with get_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute(
+        cur = conn.cursor()
+        cur.execute(
             """
             SELECT data, cidade, hotel, valor_hotel, diaria_viagem, ticket_alimentacao
             FROM rdv_linhas
@@ -305,30 +184,131 @@ def get_rdv_linhas(rdv_id: int) -> list[dict]:
             """,
             (rdv_id,),
         )
-        rows = cursor.fetchall()
-    linhas = []
-    for row in rows:
-        linhas.append(
-            {
-                "DATA": row[0],
-                "CIDADE": row[1],
-                "HOTEL": row[2],
-                "VALOR_HOTEL": row[3],
-                "DIARIA_EM_VIAGEM": row[4],
-                "TICKET_ALIMENTACAO": row[5],
-            }
+        rows = cur.fetchall()
+    return [
+        {
+            "DATA": r[0],
+            "CIDADE": r[1],
+            "HOTEL": r[2],
+            "VALOR_HOTEL": r[3],
+            "DIARIA_EM_VIAGEM": r[4],
+            "TICKET_ALIMENTACAO": r[5],
+        }
+        for r in rows
+    ]
+
+
+# -------------------- neon colaboradores --------------------
+
+
+def neon_available() -> bool:
+    return bool(neon_URL or (neon_HOST and neon_USER and neon_PASSWORD and neon_DB))
+
+
+def get_neon_connection():
+    if neon_URL:
+        return psycopg2.connect(neon_URL, sslmode="require")
+    if neon_HOST and neon_USER and neon_PASSWORD and neon_DB:
+        return psycopg2.connect(
+            host=neon_HOST,
+            user=neon_USER,
+            password=neon_PASSWORD,
+            dbname=neon_DB,
+            sslmode="require",
         )
-    return linhas
+    return None
+
+
+def init_neon_db() -> None:
+    conn = get_neon_connection()
+    if not conn:
+        return
+    with conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS colaboradores (
+                    id SERIAL PRIMARY KEY,
+                    nome TEXT NOT NULL,
+                    tipo TEXT NOT NULL CHECK (tipo IN ('MOTORISTA','AJUDANTE'))
+                )
+                """
+            )
+    conn.close()
+
+
+def neon_get_colaboradores(tipo: Optional[str] = None) -> list[dict]:
+    conn = get_neon_connection()
+    if not conn:
+        return []
+    with conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+            if tipo:
+                cur.execute(
+                    "SELECT id, nome, tipo FROM colaboradores WHERE tipo = %s ORDER BY nome",
+                    (tipo,),
+                )
+            else:
+                cur.execute("SELECT id, nome, tipo FROM colaboradores ORDER BY nome")
+            rows = cur.fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def neon_insert_colaborador(nome: str, tipo: str) -> None:
+    conn = get_neon_connection()
+    if not conn:
+        return
+    with conn:
+        with conn.cursor() as cur:
+            cur.execute("INSERT INTO colaboradores (nome, tipo) VALUES (%s, %s)", (nome.strip(), tipo))
+    conn.close()
+
+
+def neon_update_colaborador(colab_id: int, nome: str, tipo: str) -> None:
+    conn = get_neon_connection()
+    if not conn:
+        return
+    with conn:
+        with conn.cursor() as cur:
+            cur.execute("UPDATE colaboradores SET nome = %s, tipo = %s WHERE id = %s", (nome.strip(), tipo, colab_id))
+    conn.close()
+
+
+def neon_delete_colaborador(colab_id: int) -> None:
+    conn = get_neon_connection()
+    if not conn:
+        return
+    with conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM colaboradores WHERE id = %s", (colab_id,))
+    conn.close()
+
+
+def listar_colaboradores_por_tipo(tipo: str) -> list[dict]:
+    if neon_available():
+        colabs = neon_get_colaboradores(tipo)
+        if colabs:
+            return colabs
+    return [c for c in COLABORADORES_FALLBACK if c["tipo"] == tipo]
+
+
+def get_all_colaboradores() -> list[dict]:
+    if neon_available():
+        colabs = neon_get_colaboradores()
+        if colabs:
+            return colabs
+    return COLABORADORES_FALLBACK
+
+# -------------------- Utilidades --------------------
 
 
 def dates_between(start_date: date, end_date: date) -> list[date]:
-    """Return a list of dates between start and end inclusive."""
     days = (end_date - start_date).days
     return [start_date + timedelta(days=i) for i in range(days + 1)]
 
 
-def try_parse_date(value: date | str) -> date | None:
-    """Try common date formats and return a date object."""
+def try_parse_date(value: date | str) -> Optional[date]:
     if isinstance(value, date):
         return value
     if isinstance(value, str):
@@ -341,7 +321,6 @@ def try_parse_date(value: date | str) -> date | None:
 
 
 def format_date_br(dt: date | str) -> str:
-    """Return date formatted as dd/mm/aaaa."""
     parsed = try_parse_date(dt)
     if not parsed:
         return str(dt)
@@ -349,12 +328,10 @@ def format_date_br(dt: date | str) -> str:
 
 
 def parse_date_br(value: str) -> date:
-    """Parse a brazilian formatted date string."""
     return datetime.strptime(value, "%d/%m/%Y").date()
 
 
 def format_currency(value: float) -> str:
-    """Format a float as Brazilian currency (R$ 0,00)."""
     try:
         value = float(value)
     except (TypeError, ValueError):
@@ -362,14 +339,13 @@ def format_currency(value: float) -> str:
     if math.isnan(value) or math.isinf(value):
         value = 0
     value = round(value, 2)
-    integer_part = int(value)
-    cents = int(round((value - integer_part) * 100))
-    integer_str = f"{integer_part:,}".replace(",", ".")
-    return f"R$ {integer_str},{cents:02d}"
+    inteiro = int(value)
+    cents = int(round((value - inteiro) * 100))
+    inteiro_str = f"{inteiro:,}".replace(",", ".")
+    return f"R$ {inteiro_str},{cents:02d}"
 
 
-def to_float(value: float | str | None) -> float:
-    """Convert different types to a safe float, returning 0 when invalid."""
+def to_float(value) -> float:
     try:
         number = float(value)
     except (TypeError, ValueError):
@@ -380,18 +356,16 @@ def to_float(value: float | str | None) -> float:
 
 
 def load_font(size: int, bold: bool = False) -> ImageFont.ImageFont:
-    """Load a font for Pillow, falling back to default if necessary."""
     try:
-        system_font = Path("C:/Windows/Fonts/arialbd.ttf" if bold else "C:/Windows/Fonts/arial.ttf")
-        if system_font.exists():
-            return ImageFont.truetype(str(system_font), size)
+        win_font = Path("C:/Windows/Fonts/arialbd.ttf" if bold else "C:/Windows/Fonts/arial.ttf")
+        if win_font.exists():
+            return ImageFont.truetype(str(win_font), size)
         return ImageFont.truetype("DejaVuSans-Bold.ttf" if bold else "DejaVuSans.ttf", size)
     except Exception:
         return ImageFont.load_default()
 
 
 def measure_text_width(draw, text, font) -> float:
-    """Return the text width using available PIL helpers."""
     try:
         bbox = draw.textbbox((0, 0), text, font=font)
         return bbox[2] - bbox[0]
@@ -400,21 +374,11 @@ def measure_text_width(draw, text, font) -> float:
 
 
 def draw_text_centered(draw, text, x_center, y, font, fill="black") -> None:
-    """Helper to draw centered text horizontally."""
     width = measure_text_width(draw, text, font)
     draw.text((x_center - width / 2, y), text, font=font, fill=fill)
 
 
-def draw_wrapped_text(
-    draw,
-    text,
-    x,
-    y,
-    font,
-    max_width,
-    line_height: float,
-) -> None:
-    """Draw text wrapping automatically to stay within the specified width."""
+def draw_wrapped_text(draw, text, x, y, font, max_width, line_height: float) -> None:
     words = text.split()
     line = ""
     for word in words:
@@ -429,6 +393,8 @@ def draw_wrapped_text(
     if line:
         draw.text((x, y), line, font=font, fill="black")
 
+# -------------------- Geracao da imagem --------------------
+
 
 def generate_image(
     colaborador_nome: str,
@@ -440,71 +406,70 @@ def generate_image(
     linhas: list[dict],
     mostrar_valores: bool = False,
 ) -> BytesIO:
-    """Build a PNG image version of the RDV."""
     width, height = A4_WIDTH_PX, A4_HEIGHT_PX
     margin_x = int(width * 0.03)
-    margin_top = int(height * 0.07)
-    bottom_margin = int(height * 0.05)
-    reserved_footer = int(height * 0.32)
+    margin_top = int(height * 0.06)
+    bottom_margin = int(height * 0.02)
+    reserved_footer = int(height * 0.2)
+
     img = Image.new("RGB", (width, height), "white")
     draw = ImageDraw.Draw(img)
-    title_font = load_font(int(height * 0.024), bold=True)
-    header_font = load_font(int(height * 0.014), bold=True)
-    regular_font = load_font(int(height * 0.012))
-    small_font = load_font(int(height * 0.01))
+
+    title_font = load_font(int(height * 0.023), bold=True)
+    header_font = load_font(int(height * 0.0115), bold=True)
+    regular_font = load_font(int(height * 0.0105))
+    small_font = load_font(int(height * 0.009))
 
     y_cursor = margin_top
     if LOGO_PATH.exists():
         logo = Image.open(LOGO_PATH).convert("RGBA")
-        ratio = min((width * 0.04) / logo.width, (height * 0.045) / logo.height, 1.0)
+        ratio = min((width * 0.035) / logo.width, (height * 0.035) / logo.height, 1.0)
         logo_size = (int(logo.width * ratio), int(logo.height * ratio))
         logo = logo.resize(logo_size, resample=RESAMPLE_FILTER)
-        logo_y = margin_top - int(height * 0.025)
+        logo_y = margin_top - int(height * 0.015)
         img.paste(logo, (margin_x, logo_y), logo)
-        y_cursor = max(y_cursor, logo_y + logo_size[1] + int(height * 0.008))
-    else:
-        y_cursor += int(height * 0.008)
+        y_cursor = max(y_cursor, logo_y + logo_size[1] + int(height * 0.01))
+
     title = (
-        "RELATÓRIO DE DESPESAS DE VIAGEM - RDV - MOTORISTA"
+        "RELATORIO DE DESPESAS DE VIAGEM - RDV - MOTORISTA"
         if tipo == "MOTORISTA"
-        else "RELATÓRIO DE DESPESAS DE VIAGEM - RDV - AJUDANTE DE MOTORISTA"
+        else "RELATORIO DE DESPESAS DE VIAGEM - RDV - AJUDANTE DE MOTORISTA"
     )
-    draw_text_centered(draw, title, width / 2, y_cursor - int(height * 0.05), title_font)
+    draw_text_centered(draw, title, width / 2, y_cursor - int(height * 0.03), title_font)
 
     draw.text((margin_x, y_cursor), f"NOME: {colaborador_nome}", font=regular_font, fill="black")
     draw.text(
-        (width * 0.52, y_cursor),
+        (width * 0.5, y_cursor),
         f"DATA QUINZENA (INICIO E FINAL): {format_date_br(data_inicial)} a {format_date_br(data_final)}",
         font=regular_font,
         fill="black",
     )
-    y_cursor += int(height * 0.024)
+    y_cursor += int(height * 0.022)
     draw.text(
         (margin_x, y_cursor),
-        "HOUVE ADIANTAMENTO DE DIÁRIA? (   ) NÃO (   ) SIM",
+        "HOUVE adiantamento DE DIARIA? (   ) nao (   ) SIM",
         font=regular_font,
         fill="black",
     )
-    valor_text = "NO VALOR DE R$ _____________________"
-    draw.text((width * 0.6, y_cursor), valor_text, font=regular_font, fill="black")
-    y_cursor += int(height * 0.028)
+    draw.text((width * 0.6, y_cursor), "NO VALOR DE R$ _____________________", font=regular_font, fill="black")
+    y_cursor += int(height * 0.024)
 
     table_left = margin_x
     table_right = width - margin_x
     table_width = table_right - table_left
     total_rows = max(len(linhas), 1)
+
     available_height = height - y_cursor - bottom_margin - reserved_footer
-    row_height = int(available_height / (total_rows + 1)) if available_height > 0 else int(height * 0.02)
-    row_height = max(row_height, int(height * 0.02))
-    row_height = min(row_height, int(height * 0.033))
+    row_height = max(int(height * 0.017), int(available_height / (total_rows + 1)))
+    row_height = min(row_height, int(height * 0.028))
     table_top = y_cursor
 
     if tipo == "MOTORISTA":
         columns = [
-            ("DATA", "DATA", 0.17),
-            ("CIDADE", "CIDADE", 0.33),
-            ("DIÁRIA EM VIAGEM", "DIARIA_EM_VIAGEM", 0.25),
-            ("TICKET ALIMENTAÇÃO", "TICKET_ALIMENTACAO", 0.25),
+            ("DATA", "DATA", 0.16),
+            ("CIDADE", "CIDADE", 0.32),
+            ("DIARIA EM VIAGEM", "DIARIA_EM_VIAGEM", 0.26),
+            ("TICKET ALIMENTACAO", "TICKET_ALIMENTACAO", 0.26),
         ]
     else:
         columns = [
@@ -512,167 +477,116 @@ def generate_image(
             ("CIDADE", "CIDADE", 0.2),
             ("HOTEL", "HOTEL", 0.2),
             ("VALOR HOTEL", "VALOR_HOTEL", 0.12),
-            ("DIÁRIA EM VIAGEM", "DIARIA_EM_VIAGEM", 0.17),
-            ("TICKET ALIMENTAÇÃO", "TICKET_ALIMENTACAO", 0.17),
+            ("DIARIA EM VIAGEM", "DIARIA_EM_VIAGEM", 0.17),
+            ("TICKET ALIMENTACAO", "TICKET_ALIMENTACAO", 0.17),
         ]
 
-    column_positions: list[tuple[str, str, int, int]] = []
-    cursor_pos = table_left
+    col_positions: list[tuple[str, str, int, int]] = []
+    cursor_x = table_left
     for header, key, pct in columns:
-        next_cursor = cursor_pos + int(table_width * pct)
-        column_positions.append((header, key, cursor_pos, next_cursor))
-        cursor_pos = next_cursor
-    if column_positions:
-        column_positions[-1] = (
-            column_positions[-1][0],
-            column_positions[-1][1],
-            column_positions[-1][2],
-            table_right,
-        )
+        next_x = cursor_x + int(table_width * pct)
+        col_positions.append((header, key, cursor_x, next_x))
+        cursor_x = next_x
+    if col_positions:
+        last = col_positions[-1]
+        col_positions[-1] = (last[0], last[1], last[2], table_right)
 
     table_bottom = table_top + row_height * (total_rows + 1)
     draw.rectangle((table_left, table_top, table_right, table_bottom), outline="black", width=2)
-
     draw.line((table_left, table_top + row_height, table_right, table_top + row_height), fill="black", width=2)
-    for header, _, left, right in column_positions:
+    for header, _, left, right in col_positions:
         draw.line((left, table_top, left, table_bottom), fill="black", width=2)
-        draw.text((left + int(width * 0.003), table_top + int(row_height * 0.25)), header, font=header_font, fill="black")
+        draw.text((left + int(width * 0.0025), table_top + int(row_height * 0.22)), header, font=header_font, fill="black")
     draw.line((table_right, table_top, table_right, table_bottom), fill="black", width=2)
 
     for idx, linha in enumerate(linhas):
         y = table_top + row_height * (idx + 1)
         draw.line((table_left, y + row_height, table_right, y + row_height), fill="black", width=1)
         is_domingo = False
-        for _, key, left, right in column_positions:
+        for _, key, left, _ in col_positions:
             value = linha.get(key, "")
+            text = ""
             if key == "DATA" and value:
-                parsed_date = try_parse_date(value)
-                if parsed_date and parsed_date.weekday() == 6:
+                parsed = try_parse_date(value)
+                if parsed and parsed.weekday() == 6:
                     text = "DOMINGO"
                     is_domingo = True
-                elif parsed_date:
-                    text = parsed_date.strftime("%d/%m/%Y")
+                elif parsed:
+                    text = parsed.strftime("%d/%m/%Y")
                 else:
                     text = str(value)
             elif key in ("DIARIA_EM_VIAGEM", "TICKET_ALIMENTACAO", "VALOR_HOTEL"):
-                numeric_value = to_float(value)
-                if mostrar_valores and numeric_value != 0:
-                    text = format_currency(numeric_value)
-                else:
-                    text = ""
+                num = to_float(value)
+                if mostrar_valores and num != 0:
+                    text = format_currency(num)
             else:
-                text = str(value) if value not in (None, "") else ""
-            draw.text((left + int(width * 0.003), y + int(row_height * 0.2)), text, font=regular_font, fill="black")
+                text = "" if value in (None, "") else str(value)
+            draw.text((left + int(width * 0.0025), y + int(row_height * 0.18)), text, font=regular_font, fill="black")
         if is_domingo:
             draw.line((table_left, y + row_height / 2, table_right, y + row_height / 2), fill="black", width=1)
-    for _, _, _, right in column_positions:
+    for _, _, _, right in col_positions:
         draw.line((right, table_top, right, table_bottom), fill="black", width=2)
 
-    total_text = "TOTAL DA QUINZENA EM R$ -----> R$ _____________________"
-    total_y = table_bottom + int(height * 0.012)
-    draw.text((table_left, total_y), total_text, font=header_font, fill="black")
+    total_y = table_bottom + int(height * 0.01)
+    draw.text((table_left, total_y), "TOTAL DA QUINZENA EM R$ -----> R$ __________________", font=header_font, fill="black")
 
-    loc_y = total_y + int(height * 0.028)
-    draw.text((margin_x, loc_y), "LOCAL/DATA: ________________________________", font=regular_font, fill="black")
-    date_y = loc_y + int(height * 0.02)
-    draw.text((margin_x, date_y), ", _____________________  de  _____________________  de  __________", font=regular_font, fill="black")
+    loc_y = total_y + int(height * 0.02)
+    draw.text((margin_x, loc_y), "LOCAL/DATA:", font=regular_font, fill="black")
+    draw.text((margin_x + int(width * 0.12), loc_y), "______________________________", font=regular_font, fill="black")
+    date_y = loc_y + int(height * 0.017)
+    draw.text((margin_x, date_y), ", ____________  de  ____________  de  ____________", font=regular_font, fill="black")
 
-    sign_label_y = date_y + int(height * 0.05)
+    sign_label_y = date_y + int(height * 0.06)
+    line_y = sign_label_y + int(height * 0.055)
     signature_width = (width - 2 * margin_x) / 3
-    max_line_width = signature_width - int(width * 0.02)
-    for idx, text in enumerate(["ASSINATURA COLABORADOR", "ANALISTA FROTA", "GESTOR FROTA"]):
+    max_line = signature_width - int(width * 0.02)
+    labels = ["ASSINATURA COLABORADOR", "ANALISTA FROTA", "GESTOR FROTA"]
+    for idx, label in enumerate(labels):
         x = margin_x + idx * signature_width
-        draw.text((x + 10, sign_label_y), text, font=regular_font, fill="black")
-        line_y = sign_label_y + int(height * 0.055)
-        draw.line((x + 5, line_y, x + 5 + max_line_width, line_y), fill="black", width=2)
+        draw.text((x + 10, sign_label_y), label, font=regular_font, fill="black")
+        draw.line((x + 5, line_y, x + 5 + max_line, line_y), fill="black", width=2)
 
+    obs_y = line_y + int(height * 0.035)
     obs_text = (
-        "OBSERVAÇÃO: Nos termos da Convenção Coletiva a diária de viagem é destinada apenas ao colaborador "
-        "que exercer atividade fora da base considerando cada período modular de 24 horas, o recebimento da diária "
-        "exclui-se o pagamento da ajuda de alimentação (Ticket)."
+        "OBSERVACAO: Nos termos da Convencao Coletiva a diaria de viagem e destinada apenas ao colaborador "
+        "que exercer atividade fora da base consideranao cada periodo modular de 24 horas, "
+        "o recebimenao da diaria exclui-se o pagamenao da ajuda de alimentacao (Ticket)."
     )
-    obs_y = sign_label_y + int(height * 0.085)
-    obs_line_height = getattr(small_font, "size", 18) + 4 if hasattr(small_font, "size") else 22
+    obs_line_height = getattr(small_font, "size", 18) + 4
     draw_wrapped_text(draw, obs_text, margin_x, obs_y, small_font, width - 2 * margin_x, obs_line_height)
+
     buffer = BytesIO()
     img.save(buffer, format="PNG", dpi=(DPI, DPI))
     buffer.seek(0)
     return buffer
 
-
-
-def sum_total(rows: list[dict]) -> float:
-    """Sum currency columns for total display."""
-    total = 0.0
-    for row in rows:
-        for key in ("DIARIA_EM_VIAGEM", "TICKET_ALIMENTACAO", "VALOR_HOTEL"):
-            total += to_float(row.get(key, 0))
-    return total
-
-
-def build_table_dataframe(tipo: str, start_date: date, end_date: date) -> pd.DataFrame:
-    """Generate a dataframe structure with the required columns."""
-    column_order = [
-        "DATA",
-        "CIDADE",
-        *(["HOTEL", "VALOR_HOTEL"] if tipo == "AJUDANTE" else []),
-        "DIARIA_EM_VIAGEM",
-        "TICKET_ALIMENTACAO",
-    ]
-    rows = []
-    for current in dates_between(start_date, end_date):
-        rows.append(
-            {
-                "DATA": format_date_br(current),
-                "CIDADE": "",
-                "HOTEL": "" if tipo == "AJUDANTE" else None,
-                "VALOR_HOTEL": 0.0 if tipo == "AJUDANTE" else None,
-                "DIARIA_EM_VIAGEM": 0.0,
-                "TICKET_ALIMENTACAO": 0.0,
-            }
-        )
-    df = pd.DataFrame(rows, columns=column_order)
-    return df
-
-
-def ensure_session_state() -> None:
-    """Prepare session state keys used across the app."""
-    st.session_state.setdefault("rdv_table", None)
-    st.session_state.setdefault("rdv_meta", {})
-    st.session_state.setdefault("generated_image_data", None)
-    st.session_state.setdefault("generated_image_name", "")
-    st.session_state.setdefault("generated_image_page", "")
-    st.session_state.setdefault("batch_previews", {"tipo": "", "previews": []})
+# -------------------- Print helpers --------------------
 
 
 def open_print_window(image_data: bytes) -> None:
-    """Open a new browser tab with the RDV image and call window.print()."""
     _open_print_window([image_data])
 
 
 def open_print_window_batch(images: list[bytes]) -> None:
-    """Open a new browser tab with multiple RDV images for batch printing."""
-    if not images:
-        return
-    _open_print_window(images)
+    if images:
+        _open_print_window(images)
 
 
 def _open_print_window(images: list[bytes]) -> None:
     encoded_images = [base64.b64encode(img).decode("ascii") for img in images]
-    imgs_markup = "".join(
-        f'<div class="rdv-wrapper"><img src="data:image/png;base64,{encoded}" /></div>'
-        for encoded in encoded_images
+    wrappers = "".join(
+        f'<div class="rdv-wrapper"><img src="data:image/png;base64,{img}" /></div>' for img in encoded_images
     )
+    page_break_style = "page-break-after: always;" if len(encoded_images) > 1 else "page-break-after: auto;"
     components.html(
         f"""
         <script>
-            const printWindow = window.open("", "_blank");
-            if (printWindow) {{
-                printWindow.document.write(`
-                    <!DOCTYPE html>
+            const w = window.open('', '_blank');
+            if (w) {{
+                w.document.write(`
                     <html>
                         <head>
-                            <meta charset="utf-8" />
+                            <meta charset='utf-8' />
                             <style>
                                 @page {{
                                     size: A4 landscape;
@@ -685,37 +599,33 @@ def _open_print_window(images: list[bytes]) -> None:
                                     height: 100%;
                                 }}
                                 body {{
-                                    background: #ffffff;
+                                    background: #fff;
+                                    display: flex;
+                                    flex-direction: column;
+                                    align-items: center;
                                 }}
                                 .rdv-wrapper {{
                                     width: 100%;
-                                    height: 100vh;
+                                    {page_break_style}
                                     display: flex;
-                                    align-items: center;
                                     justify-content: center;
-                                    page-break-after: always;
-                                }}
-                                .rdv-wrapper:last-child {{
-                                    page-break-after: auto;
+                                    align-items: center;
                                 }}
                                 .rdv-wrapper img {{
                                     width: 100%;
-                                    height: 100%;
-                                    object-fit: contain;
+                                    height: auto;
                                     display: block;
                                 }}
                             </style>
                         </head>
-                        <body>
-                            {imgs_markup}
-                        </body>
+                        <body>{wrappers}</body>
                     </html>
                 `);
-                printWindow.document.close();
-                printWindow.focus();
-                printWindow.print();
+                w.document.close();
+                w.focus();
+                w.print();
             }} else {{
-                alert("Permitida a abertura de janelas pop-up para imprimir o RDV.");
+                alert('Habilite pop-ups para imprimir o RDV.');
             }}
         </script>
         """,
@@ -723,26 +633,333 @@ def _open_print_window(images: list[bytes]) -> None:
     )
 
 
+# -------------------- Construcao de tabela --------------------
+
+
+def sum_total(rows: list[dict]) -> float:
+    total = 0.0
+    for row in rows:
+        for key in ("DIARIA_EM_VIAGEM", "TICKET_ALIMENTACAO", "VALOR_HOTEL"):
+            total += to_float(row.get(key, 0))
+    return total
+
+
+def build_table_dataframe(tipo: str, start_date: date, end_date: date) -> pd.DataFrame:
+    cols = ["DATA", "CIDADE"]
+    if tipo == "AJUDANTE":
+        cols += ["HOTEL", "VALOR_HOTEL"]
+    cols += ["DIARIA_EM_VIAGEM", "TICKET_ALIMENTACAO"]
+    rows = []
+    for current in dates_between(start_date, end_date):
+        rows.append(
+            {
+                "DATA": format_date_br(current),
+                "CIDADE": "",
+                "HOTEL": "" if tipo == "AJUDANTE" else None,
+                "VALOR_HOTEL": 0.0 if tipo == "AJUDANTE" else None,
+                "DIARIA_EM_VIAGEM": 0.0,
+                "TICKET_ALIMENTACAO": 0.0,
+            }
+        )
+    return pd.DataFrame(rows, columns=cols)
+
+
+def ensure_session_state() -> None:
+    st.session_state.setdefault("rdv_table", None)
+    st.session_state.setdefault("rdv_meta", {})
+    st.session_state.setdefault("generated_image_data", None)
+    st.session_state.setdefault("generated_image_name", "")
+    st.session_state.setdefault("generated_image_page", "")
+    st.session_state.setdefault("batch_previews", {"tipo": "", "previews": []})
+
+# -------------------- UI helpers --------------------
+
+
+def get_default_quinzena() -> tuple[date, date]:
+    fallback_start = date(2025, 11, 10)
+    duration = timedelta(days=12)
+    today = date.today()
+
+    def next_monday(d: date) -> date:
+        while d.weekday() != 0:
+            d += timedelta(days=1)
+        return d
+
+    with get_connection() as conn:
+        cur = conn.cursor()
+        cur.execute("SELECT data_final FROM rdv ORDER BY id DESC LIMIT 1")
+        last = cur.fetchone()
+
+    if last:
+        try:
+            last_final = datetime.fromisoformat(last[0]).date()
+            candidate = last_final + timedelta(days=1)
+        except Exception:
+            candidate = fallback_start
+    else:
+        candidate = fallback_start
+
+    candidate = next_monday(candidate)
+    end = candidate + duration
+    if today < candidate:
+        return candidate, end
+
+    while today > end:
+        candidate = next_monday(end + timedelta(days=1))
+        end = candidate + duration
+    return candidate, end
+
+
 def render_generated_image(page: str) -> None:
-    """Display the most recently generated image if it belongs to this page."""
-    image_data = st.session_state.get("generated_image_data")
-    image_page = st.session_state.get("generated_image_page")
-    if image_data and page == image_page:
-        st.image(image_data, use_container_width=True)
+    data = st.session_state.get("generated_image_data")
+    where = st.session_state.get("generated_image_page")
+    if data and where == page:
+        st.image(data, use_container_width=True)
         st.download_button(
             "Baixar RDV (PNG)",
-            data=image_data,
+            data=data,
             file_name=st.session_state.get("generated_image_name", "rdv.png"),
             mime="image/png",
         )
         if st.button("Imprimir RDV gerado", key=f"print_{page}"):
-            open_print_window(image_data)
+            open_print_window(data)
+
+
+# -------------------- Paginas --------------------
+
+
+def pagina_colaboradores() -> None:
+    st.header("Colaboradores (Neon)")
+    neon_ok = neon_available()
+    if not neon_ok:
+        st.info("Neon nao configurado. Mostrando lista somente para referencia (nao editavel).")
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        nome_novo = st.text_input("Nome do colaborador")
+    with col2:
+        tipo_novo = st.selectbox("Tipo", TIPOS_COLABORADOR, key="tipo_novo")
+    if st.button("Salvar colaborador", disabled=not neon_ok):
+        if not nome_novo.strip():
+            st.error("Informe o nome.")
+        else:
+            neon_insert_colaborador(nome_novo, tipo_novo)
+            st.success("Colaborador salvo.")
+            st.experimental_rerun()
+
+    colabs = get_all_colaboradores()
+    if not colabs:
+        st.info("Nenhum colaborador cadastrado.")
+        return
+
+    nomes_map = {f"{c.get('nome')} ({c.get('tipo')})": c for c in colabs}
+    selecionado = st.selectbox("Editar/Excluir", list(nomes_map.keys()))
+    csel = nomes_map[selecionado]
+    novo_nome = st.text_input("Nome", value=csel.get("nome", ""), key="edit_nome")
+    novo_tipo = st.selectbox("Tipo", TIPOS_COLABORADOR, index=TIPOS_COLABORADOR.index(csel.get("tipo", "MOTORISTA")), key="edit_tipo")
+    cols_btn = st.columns(2)
+    with cols_btn[0]:
+        if st.button("Atualizar", disabled=not neon_ok):
+            neon_update_colaborador(int(csel.get("id", 0)), novo_nome, novo_tipo)
+            st.success("Atualizado.")
+            st.experimental_rerun()
+    with cols_btn[1]:
+        if st.button("Excluir", disabled=not neon_ok):
+            neon_delete_colaborador(int(csel.get("id", 0)))
+            st.warning("Excluido.")
+            st.experimental_rerun()
+
+    st.subheader("Lista")
+    st.dataframe(pd.DataFrame(colabs), use_container_width=True)
+
+
+def pagina_novo_rdv() -> None:
+    st.header("Novo RDV")
+    tipo = st.selectbox("Tipo de colaborador", TIPOS_COLABORADOR, format_func=lambda t: "Motorista" if t == "MOTORISTA" else "Ajudante")
+    colaboradores = listar_colaboradores_por_tipo(tipo)
+    if not colaboradores:
+        st.warning("Nenhum colaborador para este tipo.")
+        return
+    modo_all_label = f"Todos os {tipo.lower()}s"
+    modo = st.radio("Modo de Geracao", ["Individual", modo_all_label], horizontal=True)
+    data_ini, data_fim = get_default_quinzena()
+    data_inicial = st.date_input("Data inicial", value=data_ini)
+    data_final = st.date_input("Data final", value=data_fim)
+    if data_final < data_inicial:
+        st.error("A data final deve ser igual ou posterior a inicial.")
+        return
+    adiantamento_flag = st.checkbox("Houve adiantamento de diaria?")
+    valor_adiantamento = 0.0
+    if adiantamento_flag:
+        valor_adiantamento = st.number_input("Valor do adiantamento (R$)", min_value=0.0, value=0.0, step=10.0, format="%f")
+
+    if modo == "Individual":
+        nomes = [c["nome"] for c in colaboradores]
+        nome_escolhido = st.selectbox("Colaborador", nomes)
+        colaborador = next(c for c in colaboradores if c["nome"] == nome_escolhido)
+        if st.button("Gerar tabela da quinzena"):
+            st.session_state["rdv_table"] = build_table_dataframe(tipo, data_inicial, data_final)
+            st.session_state["rdv_meta"] = {
+                "tipo": tipo,
+                "colaborador_nome": colaborador["nome"],
+                "data_inicial": data_inicial,
+                "data_final": data_final,
+                "adiantamento": adiantamento_flag,
+                "valor_adiantamento": valor_adiantamento,
+            }
+        df = st.session_state.get("rdv_table")
+        if df is not None:
+            column_config = {"DATA": st.column_config.Column("Data", disabled=True)}
+            st.session_state["rdv_table"] = st.data_editor(df, column_config=column_config, use_container_width=True)
+            df = st.session_state["rdv_table"]
+            total = sum_total(df.to_dict("records"))
+            st.markdown(f"**TOTAL DA QUINZENA EM R$:** {format_currency(total)}")
+            if st.button("Salvar RDV"):
+                if df.empty:
+                    st.error("Tabela vazia.")
+                else:
+                    linhas = []
+                    for _, row in df.iterrows():
+                        linhas.append(
+                            {
+                                "DATA": parse_date_br(row["DATA"]).isoformat(),
+                                "CIDADE": row.get("CIDADE", ""),
+                                "HOTEL": row.get("HOTEL") if tipo == "AJUDANTE" else None,
+                                "VALOR_HOTEL": to_float(row.get("VALOR_HOTEL")) if tipo == "AJUDANTE" else None,
+                                "DIARIA_EM_VIAGEM": to_float(row.get("DIARIA_EM_VIAGEM")),
+                                "TICKET_ALIMENTACAO": to_float(row.get("TICKET_ALIMENTACAO")),
+                            }
+                        )
+                    insert_rdv(
+                        colaborador["nome"],
+                        tipo,
+                        data_inicial,
+                        data_final,
+                        adiantamento_flag,
+                        valor_adiantamento if adiantamento_flag else 0.0,
+                        total,
+                        linhas,
+                    )
+                    st.success("RDV salvo.")
+                    st.session_state["rdv_table"] = None
+                    st.session_state["rdv_meta"] = {}
+            if st.button("Gerar imagem do RDV (PNG)"):
+                meta = st.session_state.get("rdv_meta", {})
+                if not meta:
+                    st.error("Gere a tabela antes.")
+                else:
+                    img_buffer = generate_image(
+                        colaborador_nome=colaborador["nome"],
+                        tipo=tipo,
+                        data_inicial=data_inicial,
+                        data_final=data_final,
+                        adiantamento=adiantamento_flag,
+                        valor_adiantamento=valor_adiantamento if adiantamento_flag else 0.0,
+                        linhas=df.to_dict("records"),
+                        mostrar_valores=True,
+                    )
+                    st.session_state["generated_image_data"] = img_buffer.getvalue()
+                    st.session_state["generated_image_name"] = (
+                        f"RDV_{colaborador['nome'].replace(' ', '_')}_{tipo}_"
+                        f"{data_inicial.strftime('%Y%m%d')}-{data_final.strftime('%Y%m%d')}.png"
+                    )
+                    st.session_state["generated_image_page"] = "Novo RDV"
+        render_generated_image("Novo RDV")
+    else:
+        if st.button(f"Gerar RDVs para todos os {tipo.lower()}s"):
+            template = build_table_dataframe(tipo, data_inicial, data_final).to_dict("records")
+            previews = []
+            for colab in colaboradores:
+                rows_copy = [r.copy() for r in template]
+                img_buffer = generate_image(
+                    colaborador_nome=colab["nome"],
+                    tipo=tipo,
+                    data_inicial=data_inicial,
+                    data_final=data_final,
+                    adiantamento=adiantamento_flag,
+                    valor_adiantamento=valor_adiantamento if adiantamento_flag else 0.0,
+                    linhas=rows_copy,
+                )
+                previews.append(
+                    {
+                        "nome": colab["nome"],
+                        "image": img_buffer.getvalue(),
+                        "file_name": f"RDV_{colab['nome'].replace(' ', '_')}_{tipo}_{data_inicial.strftime('%Y%m%d')}-{data_final.strftime('%Y%m%d')}.png",
+                    }
+                )
+            st.session_state["batch_previews"] = {"tipo": tipo, "previews": previews}
+            st.success(f"Gerados {len(previews)} RDVs.")
+        batch = st.session_state.get("batch_previews", {})
+        if batch.get("tipo") == tipo:
+            for idx, preview in enumerate(batch["previews"]):
+                st.subheader(preview["nome"])
+                st.image(preview["image"], use_container_width=True)
+                st.download_button(
+                    "Baixar RDV (PNG)",
+                    data=preview["image"],
+                    file_name=preview["file_name"],
+                    mime="image/png",
+                    key=f"dl_{tipo}_{idx}",
+                )
+                if st.button("Imprimir RDV", key=f"pr_{tipo}_{idx}"):
+                    open_print_window(preview["image"])
+            if batch.get("previews"):
+                if st.button(f"Imprimir todos os {tipo.lower()}s", key=f"pr_all_{tipo}"):
+                    open_print_window_batch([p["image"] for p in batch["previews"]])
+
+
+def pagina_relatorios() -> None:
+    st.header("Relatorios salvos")
+    rdvs = get_rdvs()
+    if not rdvs:
+        st.info("Nenhum RDV salvo.")
+        return
+    labels = {
+        f"{r['nome']} | {r['tipo']} | {format_date_br(r['data_inicial'])} a {format_date_br(r['data_final'])} (ID: {r['id']})": r
+        for r in rdvs
+    }
+    selecionado = st.selectbox("RDV", options=list(labels.keys()))
+    rdv_data = labels[selecionado]
+    linhas = get_rdv_linhas(rdv_data["id"])
+    st.markdown(
+        f"**Colaborador:** {rdv_data['nome']} | **Tipo:** {rdv_data['tipo']} | "
+        f"**Quinzena:** {format_date_br(rdv_data['data_inicial'])} a {format_date_br(rdv_data['data_final'])}"
+    )
+    st.markdown(
+        f"**Total da quinzena:** {format_currency(rdv_data['total_quinzena'])} | "
+        f"**adiantamento:** {'Sim' if rdv_data['adiantamento'] else 'nao'} "
+        f"{format_currency(rdv_data['valor_adiantamento']) if rdv_data['adiantamento'] else ''}"
+    )
+    df = pd.DataFrame(linhas)
+    if rdv_data["tipo"] == "MOTORISTA":
+        st.dataframe(df[["DATA", "CIDADE", "DIARIA_EM_VIAGEM", "TICKET_ALIMENTACAO"]])
+    else:
+        st.dataframe(df[["DATA", "CIDADE", "HOTEL", "VALOR_HOTEL", "DIARIA_EM_VIAGEM", "TICKET_ALIMENTACAO"]])
+    if st.button("Gerar imagem do RDV (PNG)"):
+        img_buffer = generate_image(
+            colaborador_nome=rdv_data["nome"],
+            tipo=rdv_data["tipo"],
+            data_inicial=datetime.fromisoformat(rdv_data["data_inicial"]).date(),
+            data_final=datetime.fromisoformat(rdv_data["data_final"]).date(),
+            adiantamento=rdv_data["adiantamento"],
+            valor_adiantamento=rdv_data["valor_adiantamento"],
+            linhas=linhas,
+            mostrar_valores=True,
+        )
+        st.session_state["generated_image_data"] = img_buffer.getvalue()
+        st.session_state["generated_image_name"] = (
+            f"RDV_{rdv_data['nome'].replace(' ', '_')}_{rdv_data['tipo']}_"
+            f"{datetime.fromisoformat(rdv_data['data_inicial']).strftime('%Y%m%d')}-"
+            f"{datetime.fromisoformat(rdv_data['data_final']).strftime('%Y%m%d')}.png"
+        )
+        st.session_state["generated_image_page"] = "Relatorios salvos"
+    render_generated_image("Relatorios salvos")
 
 
 def main() -> None:
-    """Primary Streamlit app logic, with sidebar navigation."""
     ensure_session_state()
     init_db()
+    init_neon_db()
+
     logo_col, title_col = st.columns([1, 5])
     with logo_col:
         if LOGO_PATH.exists():
@@ -750,245 +967,29 @@ def main() -> None:
         else:
             st.markdown("JR")
     with title_col:
-        st.title("Relatório de Despesas de Viagem – RDV JR")
-    page = st.sidebar.selectbox(
-        "Menu", ["Novo RDV", "Relatórios salvos"]
-    )
+        st.title("Relatorio de Despesas de Viagem - RDV JR")
 
-    if page == "Novo RDV":
-        st.header("Novo RDV")
-        tipo = st.selectbox("Tipo de colaborador", TIPOS_COLABORADOR, format_func=lambda t: "Motorista" if t == "MOTORISTA" else "Ajudante")
-        colaboradores_disponiveis = listar_colaboradores_por_tipo(tipo)
-        if not colaboradores_disponiveis:
-            st.warning("Não há colaboradores cadastrados para o tipo selecionado.")
-            return
-        modo_all_label = f"Todos os {tipo.capitalize()}s"
-        modo = st.radio(
-            "Modo de geração",
-            ["Individual", modo_all_label],
-            horizontal=True,
-        )
-        default_start, default_end = get_default_quinzena()
-        data_inicial = st.date_input("Data inicial", value=default_start)
-        data_final = st.date_input("Data final", value=default_end)
-        if data_final < data_inicial:
-            st.error("A data final deve ser igual ou posterior à data inicial.")
-            return
-        adiantamento_flag = st.checkbox("Houve adiantamento de diária?")
-        valor_adiantamento = 0.0
-        if adiantamento_flag:
-            valor_adiantamento = st.number_input(
-                "Valor do adiantamento (R$)",
-                min_value=0.0,
-                value=0.0,
-                step=10.0,
-                format="%f",
-            )
-
-        if st.session_state["batch_previews"].get("tipo") != tipo:
-            st.session_state["batch_previews"] = {"tipo": "", "previews": []}
-
-        if modo == "Individual":
-            nomes_colabs = [c["nome"] for c in colaboradores_disponiveis]
-            nome_escolhido = st.selectbox("Colaborador", nomes_colabs)
-            colaborador = next(c for c in colaboradores_disponiveis if c["nome"] == nome_escolhido)
-            if (
-                st.session_state["rdv_meta"].get("tipo") != tipo
-                or st.session_state["rdv_meta"].get("colaborador_nome") != colaborador["nome"]
-            ):
-                st.session_state["rdv_table"] = None
-                st.session_state["rdv_meta"] = {}
-
-            if st.button("Gerar tabela da quinzena"):
-                df = build_table_dataframe(tipo, data_inicial, data_final)
-                st.session_state["rdv_table"] = df
-                st.session_state["rdv_meta"] = {
-                    "tipo": tipo,
-                    "colaborador_nome": colaborador["nome"],
-                    "data_inicial": data_inicial,
-                    "data_final": data_final,
-                    "adiantamento": adiantamento_flag,
-                    "valor_adiantamento": valor_adiantamento,
-                }
-
-            if st.session_state["rdv_table"] is not None:
-                df = st.session_state["rdv_table"]
-                column_config = {
-                    "DATA": st.column_config.Column("Data", disabled=True),
-                }
-                st.session_state["rdv_table"] = st.data_editor(
-                    df,
-                    column_config=column_config,
-                    use_container_width=True,
-                )
-                df = st.session_state["rdv_table"]
-                total = sum_total(df.to_dict("records"))
-                st.markdown(f"**TOTAL DA QUINZENA EM R$:** {format_currency(total)}")
-                if st.button("Salvar RDV"):
-                    if df.empty:
-                        st.error("A tabela da quinzena está vazia.")
-                    else:
-                        linhas = []
-                        for _, row in df.iterrows():
-                            linhas.append(
-                                {
-                                    "DATA": datetime.strptime(row["DATA"], "%d/%m/%Y").date().isoformat(),
-                                    "CIDADE": row.get("CIDADE", ""),
-                                    "HOTEL": row.get("HOTEL") if tipo == "AJUDANTE" else None,
-                                    "VALOR_HOTEL": to_float(row.get("VALOR_HOTEL", 0)) if tipo == "AJUDANTE" else None,
-                                    "DIARIA_EM_VIAGEM": to_float(row.get("DIARIA_EM_VIAGEM", 0)),
-                                    "TICKET_ALIMENTACAO": to_float(row.get("TICKET_ALIMENTACAO", 0)),
-                                }
-                            )
-                        insert_rdv(
-                            colaborador["nome"],
-                            tipo,
-                            data_inicial,
-                            data_final,
-                            adiantamento_flag,
-                            valor_adiantamento if adiantamento_flag else 0.0,
-                            total,
-                            linhas,
-                        )
-                        st.success("RDV salvo com sucesso.")
-                        st.session_state["rdv_table"] = None
-                        st.session_state["rdv_meta"] = {}
-                if st.button("Gerar imagem do RDV (PNG)"):
-                    meta = st.session_state["rdv_meta"]
-                    if not meta:
-                        st.error("Gere a tabela antes de criar a imagem.")
-                    else:
-                        df_rows = df.to_dict("records")
-                        img_buffer = generate_image(
-                            colaborador_nome=colaborador["nome"],
-                            tipo=tipo,
-                            data_inicial=data_inicial,
-                            data_final=data_final,
-                            adiantamento=adiantamento_flag,
-                            valor_adiantamento=valor_adiantamento if adiantamento_flag else 0.0,
-                            linhas=df_rows,
-                            mostrar_valores=True,
-                        )
-                        st.session_state["generated_image_data"] = img_buffer.getvalue()
-                        st.session_state["generated_image_name"] = (
-                            f"RDV_{colaborador['nome'].replace(' ', '_')}_{tipo}_"
-                            f"{data_inicial.strftime('%Y%m%d')}-{data_final.strftime('%Y%m%d')}.png"
-                        )
-                        st.session_state["generated_image_page"] = page
-            render_generated_image(page)
-        else:
-            st.session_state["rdv_table"] = None
-            st.session_state["rdv_meta"] = {}
-            if st.button(f"Gerar RDVs para todos os {tipo.lower()}s"):
-                df_template = build_table_dataframe(tipo, data_inicial, data_final)
-                rows_template = df_template.to_dict("records")
-                previews = []
-                for colab in colaboradores_disponiveis:
-                    rows_copy = [row.copy() for row in rows_template]
-                    img_buffer = generate_image(
-                        colaborador_nome=colab["nome"],
-                        tipo=tipo,
-                        data_inicial=data_inicial,
-                        data_final=data_final,
-                        adiantamento=adiantamento_flag,
-                        valor_adiantamento=valor_adiantamento if adiantamento_flag else 0.0,
-                        linhas=rows_copy,
-                    )
-                    previews.append(
-                        {
-                            "nome": colab["nome"],
-                            "image": img_buffer.getvalue(),
-                            "file_name": (
-                                f"RDV_{colab['nome'].replace(' ', '_')}_{tipo}_"
-                                f"{data_inicial.strftime('%Y%m%d')}-{data_final.strftime('%Y%m%d')}.png"
-                            ),
-                        }
-                    )
-                st.session_state["batch_previews"] = {
-                    "tipo": tipo,
-                    "data_inicial": data_inicial,
-                    "data_final": data_final,
-                    "previews": previews,
-                }
-                st.success(f"Gerados {len(previews)} RDVs para {tipo.lower()}s.")
-            batch_data = st.session_state.get("batch_previews", {})
-            if batch_data.get("tipo") == tipo:
-                for idx, preview in enumerate(batch_data["previews"]):
-                    st.subheader(preview["nome"])
-                    st.image(preview["image"], use_container_width=True)
-                    st.download_button(
-                        "Baixar RDV (PNG)",
-                        data=preview["image"],
-                        file_name=preview["file_name"],
-                        mime="image/png",
-                        key=f"batch_download_{tipo}_{idx}",
-                    )
-                    if st.button("Imprimir RDV", key=f"batch_print_{tipo}_{idx}"):
-                        open_print_window(preview["image"])
-                if batch_data["previews"]:
-                    if st.button(f"Imprimir todos os {tipo.lower()}s", key=f"batch_print_all_{tipo}"):
-                        open_print_window_batch(
-                            [preview["image"] for preview in batch_data["previews"]]
-                        )
-    else:  # Relatórios salvos
-        # Listagem e reabertura de RDVs previamente salvos
-        st.header("Relatórios salvos")
-        rdvs = get_rdvs()
-        if not rdvs:
-            st.info("Nenhum RDV salvo no banco.")
-            return
-        rdv_label = {
-            f"{item['nome']} | {item['tipo']} | {format_date_br(item['data_inicial'])} a {format_date_br(item['data_final'])} (ID: {item['id']})": item
-            for item in rdvs
-        }
-        selecionado = st.selectbox("RDV", options=list(rdv_label.keys()))
-        rdv_data = rdv_label[selecionado]
-        linhas = get_rdv_linhas(rdv_data["id"])
-        st.markdown(
-            f"**Colaborador:** {rdv_data['nome']} | **Tipo:** {rdv_data['tipo']} | "
-            f"**Quinzena:** {format_date_br(rdv_data['data_inicial'])} a {format_date_br(rdv_data['data_final'])}"
-        )
-        st.markdown(
-            f"**Total da quinzena:** {format_currency(rdv_data['total_quinzena'])} | "
-            f"**Adiantamento:** {'Sim' if rdv_data['adiantamento'] else 'Não'} "
-            f"{format_currency(rdv_data['valor_adiantamento']) if rdv_data['adiantamento'] else ''}"
-        )
-        df = pd.DataFrame(linhas)
-        if rdv_data["tipo"] == "MOTORISTA":
-            st.dataframe(df[["DATA", "CIDADE", "DIARIA_EM_VIAGEM", "TICKET_ALIMENTACAO"]])
-        else:
-            st.dataframe(
-                df[
-                    [
-                        "DATA",
-                        "CIDADE",
-                        "HOTEL",
-                        "VALOR_HOTEL",
-                        "DIARIA_EM_VIAGEM",
-                        "TICKET_ALIMENTACAO",
-                    ]
-                ]
-            )
-        if st.button("Gerar imagem do RDV (PNG)"):
-            img_buffer = generate_image(
-                colaborador_nome=rdv_data["nome"],
-                tipo=rdv_data["tipo"],
-                data_inicial=datetime.fromisoformat(rdv_data["data_inicial"]).date(),
-                data_final=datetime.fromisoformat(rdv_data["data_final"]).date(),
-                adiantamento=rdv_data["adiantamento"],
-                valor_adiantamento=rdv_data["valor_adiantamento"],
-                linhas=linhas,
-                mostrar_valores=True,
-            )
-            st.session_state["generated_image_data"] = img_buffer.getvalue()
-            st.session_state["generated_image_name"] = (
-                f"RDV_{rdv_data['nome'].replace(' ', '_')}_{rdv_data['tipo']}_"
-                f"{datetime.fromisoformat(rdv_data['data_inicial']).strftime('%Y%m%d')}-"
-                f"{datetime.fromisoformat(rdv_data['data_final']).strftime('%Y%m%d')}.png"
-            )
-            st.session_state["generated_image_page"] = page
-        render_generated_image(page)
+    page = st.sidebar.selectbox("Menu", ["Colaboradores", "Novo RDV", "Relatorios salvos"])
+    if page == "Colaboradores":
+        pagina_colaboradores()
+    elif page == "Novo RDV":
+        pagina_novo_rdv()
+    else:
+        pagina_relatorios()
 
 
 if __name__ == "__main__":
     main()
+
+
+
+
+
+
+
+
+
+
+
+
+
