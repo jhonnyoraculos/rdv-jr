@@ -601,22 +601,19 @@ def _open_print_window(images: list[bytes]) -> None:
                                 }}
                                 .rdv-wrapper {{
                                     width: 100%;
-                                    min-height: 100vh;
-                                    margin: 0;
-                                    padding: 0;
+                                    height: 100vh;
                                     display: flex;
                                     justify-content: center;
                                     align-items: center;
                                     page-break-after: always;
-                                    page-break-inside: avoid;
                                 }}
                                 .rdv-wrapper:last-of-type {{
-                                    page-break-after: avoid;
+                                    page-break-after: auto;
                                 }}
                                 .rdv-wrapper img {{
                                     width: 100%;
-                                    max-height: 100vh;
-                                    height: auto;
+                                    height: 100%;
+                                    object-fit: contain;
                                     display: block;
                                 }}
                             </style>
