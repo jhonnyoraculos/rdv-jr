@@ -573,6 +573,7 @@ def _open_print_window(images: list[bytes]) -> None:
     wrappers = "".join(
         f'<div class="rdv-wrapper"><img src="data:image/png;base64,{img}" /></div>' for img in encoded_images
     )
+    page_break_style = "page-break-after: always;" if len(encoded_images) > 1 else "page-break-after: auto;"
     components.html(
         f"""
         <script>
@@ -601,19 +602,14 @@ def _open_print_window(images: list[bytes]) -> None:
                                 }}
                                 .rdv-wrapper {{
                                     width: 100%;
-                                    height: 100vh;
+                                    {page_break_style}
                                     display: flex;
                                     justify-content: center;
                                     align-items: center;
-                                    page-break-after: always;
-                                }}
-                                .rdv-wrapper:last-of-type {{
-                                    page-break-after: auto;
                                 }}
                                 .rdv-wrapper img {{
                                     width: 100%;
-                                    height: 100%;
-                                    object-fit: contain;
+                                    height: auto;
                                     display: block;
                                 }}
                             </style>
