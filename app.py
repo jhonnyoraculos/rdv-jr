@@ -573,7 +573,6 @@ def _open_print_window(images: list[bytes]) -> None:
     wrappers = "".join(
         f'<div class="rdv-wrapper"><img src="data:image/png;base64,{img}" /></div>' for img in encoded_images
     )
-    page_break_style = "page-break-after: always;" if len(encoded_images) > 1 else "page-break-after: auto;"
     components.html(
         f"""
         <script>
@@ -602,13 +601,21 @@ def _open_print_window(images: list[bytes]) -> None:
                                 }}
                                 .rdv-wrapper {{
                                     width: 100%;
-                                    {page_break_style}
+                                    min-height: 100vh;
+                                    margin: 0;
+                                    padding: 0;
                                     display: flex;
                                     justify-content: center;
                                     align-items: center;
+                                    page-break-after: always;
+                                    page-break-inside: avoid;
+                                }}
+                                .rdv-wrapper:last-of-type {{
+                                    page-break-after: avoid;
                                 }}
                                 .rdv-wrapper img {{
                                     width: 100%;
+                                    max-height: 100vh;
                                     height: auto;
                                     display: block;
                                 }}
@@ -667,6 +674,7 @@ def ensure_session_state() -> None:
     st.session_state.setdefault("generated_image_name", "")
     st.session_state.setdefault("generated_image_page", "")
     st.session_state.setdefault("batch_previews", {"tipo": "", "previews": []})
+    st.session_state.setdefault("page_selector", "Novo RDV")
 
 # -------------------- UI helpers --------------------
 
@@ -964,11 +972,12 @@ def main() -> None:
     with title_col:
         st.title("Relatorio de Despesas de Viagem - RDV JR")
 
-    page = st.sidebar.selectbox("Menu", ["Colaboradores", "Novo RDV", "Relatorios salvos"])
-    if page == "Colaboradores":
-        pagina_colaboradores()
-    elif page == "Novo RDV":
+    menu_opcoes = ["Novo RDV", "Colaboradores", "Relatorios salvos"]
+    page = st.sidebar.selectbox("Menu", menu_opcoes, key="page_selector")
+    if page == "Novo RDV":
         pagina_novo_rdv()
+    elif page == "Colaboradores":
+        pagina_colaboradores()
     else:
         pagina_relatorios()
 
