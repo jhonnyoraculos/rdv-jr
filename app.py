@@ -488,16 +488,16 @@ def generate_image(
         col_positions[-1] = (last[0], last[1], last[2], table_right)
 
     table_bottom = table_top + row_height * (total_rows + 1)
-    draw.rectangle((table_left, table_top, table_right, table_bottom), outline="black", width=2)
-    draw.line((table_left, table_top + row_height, table_right, table_top + row_height), fill="black", width=2)
+    draw.rectangle((table_left, table_top, table_right, table_bottom), outline="black", width=3)
+    draw.line((table_left, table_top + row_height, table_right, table_top + row_height), fill="black", width=3)
     for header, _, left, right in col_positions:
         draw.line((left, table_top, left, table_bottom), fill="black", width=2)
         draw.text((left + int(width * 0.0025), table_top + int(row_height * 0.22)), header, font=header_font, fill="black")
-    draw.line((table_right, table_top, table_right, table_bottom), fill="black", width=2)
+    draw.line((table_right, table_top, table_right, table_bottom), fill="black", width=3)
 
     for idx, linha in enumerate(linhas):
         y = table_top + row_height * (idx + 1)
-        draw.line((table_left, y + row_height, table_right, y + row_height), fill="black", width=1)
+        draw.line((table_left, y + row_height, table_right, y + row_height), fill="black", width=2)
         is_domingo = False
         for _, key, left, _ in col_positions:
             value = linha.get(key, "")
@@ -519,7 +519,7 @@ def generate_image(
                 text = "" if value in (None, "") else str(value)
             draw.text((left + int(width * 0.0025), y + int(row_height * 0.18)), text, font=regular_font, fill="black")
         if is_domingo:
-            draw.line((table_left, y + row_height / 2, table_right, y + row_height / 2), fill="black", width=1)
+            draw.line((table_left, y + row_height / 2, table_right, y + row_height / 2), fill="black", width=2)
     for _, _, _, right in col_positions:
         draw.line((right, table_top, right, table_bottom), fill="black", width=2)
 
