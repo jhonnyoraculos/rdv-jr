@@ -404,16 +404,16 @@ def generate_image(
 ) -> BytesIO:
     width, height = A4_WIDTH_PX, A4_HEIGHT_PX
     margin_x = int(width * 0.03)
-    margin_top = int(height * 0.06)
-    bottom_margin = int(height * 0.02)
-    reserved_footer = int(height * 0.2)
+    margin_top = int(height * 0.05)
+    bottom_margin = int(height * 0.015)
+    reserved_footer = int(height * 0.14)
 
     img = Image.new("RGB", (width, height), "white")
     draw = ImageDraw.Draw(img)
 
-    title_font = load_font(int(height * 0.023), bold=True)
-    header_font = load_font(int(height * 0.0115), bold=True)
-    regular_font = load_font(int(height * 0.0105))
+    title_font = load_font(int(height * 0.022), bold=True)
+    header_font = load_font(int(height * 0.011), bold=True)
+    regular_font = load_font(int(height * 0.0102))
     small_font = load_font(int(height * 0.009))
 
     y_cursor = margin_top
@@ -431,7 +431,7 @@ def generate_image(
         if tipo == "MOTORISTA"
         else "RELATORIO DE DESPESAS DE VIAGEM - RDV - AJUDANTE DE MOTORISTA"
     )
-    draw_text_centered(draw, title, width / 2, y_cursor - int(height * 0.03), title_font)
+    draw_text_centered(draw, title, width / 2, y_cursor - int(height * 0.028), title_font)
 
     draw.text((margin_x, y_cursor), f"NOME: {colaborador_nome}", font=regular_font, fill="black")
     draw.text(
@@ -440,7 +440,7 @@ def generate_image(
         font=regular_font,
         fill="black",
     )
-    y_cursor += int(height * 0.022)
+    y_cursor += int(height * 0.02)
     draw.text(
         (margin_x, y_cursor),
         "HOUVE adiantamento DE DIARIA? (   ) nao (   ) SIM",
@@ -448,7 +448,7 @@ def generate_image(
         fill="black",
     )
     draw.text((width * 0.6, y_cursor), "NO VALOR DE R$ _____________________", font=regular_font, fill="black")
-    y_cursor += int(height * 0.024)
+    y_cursor += int(height * 0.02)
 
     table_left = margin_x
     table_right = width - margin_x
@@ -456,8 +456,8 @@ def generate_image(
     total_rows = max(len(linhas), 1)
 
     available_height = height - y_cursor - bottom_margin - reserved_footer
-    row_height = max(int(height * 0.017), int(available_height / (total_rows + 1)))
-    row_height = min(row_height, int(height * 0.028))
+    row_height = max(int(height * 0.022), int(available_height / (total_rows + 1)))
+    row_height = min(row_height, int(height * 0.03))
     table_top = y_cursor
 
     if tipo == "MOTORISTA":
@@ -523,17 +523,17 @@ def generate_image(
     for _, _, _, right in col_positions:
         draw.line((right, table_top, right, table_bottom), fill="black", width=2)
 
-    total_y = table_bottom + int(height * 0.01)
+    total_y = table_bottom + int(height * 0.012)
     draw.text((table_left, total_y), "TOTAL DA QUINZENA EM R$ -----> R$ __________________", font=header_font, fill="black")
 
-    loc_y = total_y + int(height * 0.02)
+    loc_y = total_y + int(height * 0.022)
     draw.text((margin_x, loc_y), "LOCAL/DATA:", font=regular_font, fill="black")
     draw.text((margin_x + int(width * 0.12), loc_y), "______________________________", font=regular_font, fill="black")
-    date_y = loc_y + int(height * 0.017)
+    date_y = loc_y + int(height * 0.018)
     draw.text((margin_x, date_y), ", ____________  de  ____________  de  ____________", font=regular_font, fill="black")
 
-    sign_label_y = date_y + int(height * 0.06)
-    line_y = sign_label_y + int(height * 0.055)
+    sign_label_y = date_y + int(height * 0.055)
+    line_y = sign_label_y + int(height * 0.05)
     signature_width = (width - 2 * margin_x) / 3
     max_line = signature_width - int(width * 0.02)
     labels = ["ASSINATURA COLABORADOR", "ANALISTA FROTA", "GESTOR FROTA"]
@@ -542,7 +542,7 @@ def generate_image(
         draw.text((x + 10, sign_label_y), label, font=regular_font, fill="black")
         draw.line((x + 5, line_y, x + 5 + max_line, line_y), fill="black", width=2)
 
-    obs_y = line_y + int(height * 0.035)
+    obs_y = line_y + int(height * 0.03)
     obs_text = (
         "OBSERVACAO: Nos termos da Convencao Coletiva a diaria de viagem e destinada apenas ao colaborador "
         "que exercer atividade fora da base consideranao cada periodo modular de 24 horas, "
@@ -573,7 +573,7 @@ def _open_print_window(images: list[bytes]) -> None:
     wrappers = "".join(
         f'<div class="rdv-wrapper"><img src="data:image/png;base64,{img}" /></div>' for img in encoded_images
     )
-    page_break_style = "page-break-after: always;" if len(encoded_images) > 1 else "page-break-after: auto;"
+    page_break_style = "page-break-after: always;" if len(encoded_images) > 1 else "page-break-after: avoid;"
     components.html(
         f"""
         <script>
@@ -608,10 +608,12 @@ def _open_print_window(images: list[bytes]) -> None:
                                     align-items: center;
                                 }}
                                 .rdv-wrapper img {{
-                                    width: 100%;
+                                    max-width: 100%;
+                                    max-height: 100vh;
+                                    width: auto;
                                     height: auto;
                                     display: block;
-                                }}
+                                    }} 
                             </style>
                         </head>
                         <body>{wrappers}</body>
