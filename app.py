@@ -37,7 +37,7 @@ neon_USER = os.getenv("NEON_USER")
 neon_PASSWORD = os.getenv("NEON_PASSWORD")
 neon_DB = os.getenv("NEON_DB")
 
-# Fallback vazio caso Neon não esteja configurado
+# Fallback vazio caso Neon nÃƒÂ£o esteja configurado
 COLABORADORES_FALLBACK: list[dict] = []
 
 TIPOS_COLABORADOR = ["MOTORISTA", "AJUDANTE"]
@@ -407,14 +407,17 @@ def generate_image(
     margin_top = int(height * 0.05)
     bottom_margin = int(height * 0.015)
     reserved_footer = int(height * 0.14)
+    font_scale = 1.35
+    scale = lambda pct: int(height * pct * font_scale)
 
     img = Image.new("RGB", (width, height), "white")
     draw = ImageDraw.Draw(img)
 
-    title_font = load_font(int(height * 0.022), bold=True)
-    header_font = load_font(int(height * 0.011), bold=True)
-    regular_font = load_font(int(height * 0.0102))
-    small_font = load_font(int(height * 0.009))
+    title_font = load_font(int(height * 0.022 * font_scale), bold=True)
+    header_font = load_font(int(height * 0.011 * font_scale), bold=True)
+    regular_font = load_font(int(height * 0.0102 * font_scale))
+    bold_font = load_font(int(height * 0.0102 * font_scale), bold=True)
+    small_font = load_font(int(height * 0.009 * font_scale))
 
     y_cursor = margin_top
     if LOGO_PATH.exists():
@@ -427,28 +430,27 @@ def generate_image(
         y_cursor = max(y_cursor, logo_y + logo_size[1] + int(height * 0.01))
 
     title = (
-        "RELATORIO DE DESPESAS DE VIAGEM - RDV - MOTORISTA"
+        "RELATÓRIO DE DESPESAS DE VIAGEM - RDV - MOTORISTA"
         if tipo == "MOTORISTA"
-        else "RELATORIO DE DESPESAS DE VIAGEM - RDV - AJUDANTE DE MOTORISTA"
+        else "RELATÓRIO DE DESPESAS DE VIAGEM - RDV - AJUDANTE DE MOTORISTA"
     )
-    draw_text_centered(draw, title, width / 2, y_cursor - int(height * 0.028), title_font)
+    draw_text_centered(draw, title, width / 2, y_cursor - scale(0.028), title_font)
 
-    draw.text((margin_x, y_cursor), f"NOME: {colaborador_nome}", font=regular_font, fill="black")
+    draw.text((margin_x, y_cursor), f"NOME: {colaborador_nome}", font=bold_font, fill="black")
     draw.text(
         (width * 0.5, y_cursor),
-        f"DATA QUINZENA (INICIO E FINAL): {format_date_br(data_inicial)} a {format_date_br(data_final)}",
+        f"DATA QUINZENA (INÍCIO E FINAL): {format_date_br(data_inicial)} a {format_date_br(data_final)}",
         font=regular_font,
         fill="black",
     )
-    y_cursor += int(height * 0.02)
-    draw.text(
-        (margin_x, y_cursor),
-        "HOUVE adiantamento DE DIARIA? (   ) nao (   ) SIM",
-        font=regular_font,
-        fill="black",
-    )
-    draw.text((width * 0.6, y_cursor), "NO VALOR DE R$ _____________________", font=regular_font, fill="black")
-    y_cursor += int(height * 0.02)
+    y_cursor += scale(0.02)
+    pergunta_txt = "HOUVE ADIANTAMENTO DE DIÁRIA? (   ) NÃO (   ) SIM"
+    pergunta_w = measure_text_width(draw, pergunta_txt, regular_font)
+    draw.text((margin_x, y_cursor), pergunta_txt, font=regular_font, fill="black")
+    spacing = int(width * 0.05)
+    right_x = margin_x + pergunta_w + spacing
+    draw.text((right_x, y_cursor), "NO VALOR DE R$ _____________________", font=regular_font, fill="black")
+    y_cursor += scale(0.02)
 
     table_left = margin_x
     table_right = width - margin_x
@@ -456,16 +458,16 @@ def generate_image(
     total_rows = max(len(linhas), 1)
 
     available_height = height - y_cursor - bottom_margin - reserved_footer
-    row_height = max(int(height * 0.022), int(available_height / (total_rows + 1)))
-    row_height = min(row_height, int(height * 0.03))
+    row_height = max(int(height * 0.022 * font_scale), int(available_height / (total_rows + 1)))
+    row_height = min(row_height, int(height * 0.03 * font_scale))
     table_top = y_cursor
 
     if tipo == "MOTORISTA":
         columns = [
             ("DATA", "DATA", 0.16),
             ("CIDADE", "CIDADE", 0.32),
-            ("DIARIA EM VIAGEM", "DIARIA_EM_VIAGEM", 0.26),
-            ("TICKET ALIMENTACAO", "TICKET_ALIMENTACAO", 0.26),
+            ("DIÁRIA EM VIAGEM", "DIARIA_EM_VIAGEM", 0.26),
+            ("TICKET ALIMENTAÇÃO", "TICKET_ALIMENTACAO", 0.26),
         ]
     else:
         columns = [
@@ -473,8 +475,8 @@ def generate_image(
             ("CIDADE", "CIDADE", 0.2),
             ("HOTEL", "HOTEL", 0.2),
             ("VALOR HOTEL", "VALOR_HOTEL", 0.12),
-            ("DIARIA EM VIAGEM", "DIARIA_EM_VIAGEM", 0.17),
-            ("TICKET ALIMENTACAO", "TICKET_ALIMENTACAO", 0.17),
+            ("DIÁRIA EM VIAGEM", "DIARIA_EM_VIAGEM", 0.17),
+            ("TICKET ALIMENTAÇÃO", "TICKET_ALIMENTACAO", 0.17),
         ]
 
     col_positions: list[tuple[str, str, int, int]] = []
@@ -523,32 +525,35 @@ def generate_image(
     for _, _, _, right in col_positions:
         draw.line((right, table_top, right, table_bottom), fill="black", width=2)
 
-    total_y = table_bottom + int(height * 0.012)
+    total_y = table_bottom + scale(0.012)
     draw.text((table_left, total_y), "TOTAL DA QUINZENA EM R$ -----> R$ __________________", font=header_font, fill="black")
 
-    loc_y = total_y + int(height * 0.022)
+    loc_y = total_y + scale(0.03)
+    loc_line_x = margin_x + int(width * 0.11)
+    loc_line_w = int(width * 0.22)
     draw.text((margin_x, loc_y), "LOCAL/DATA:", font=regular_font, fill="black")
-    draw.text((margin_x + int(width * 0.12), loc_y), "______________________________", font=regular_font, fill="black")
-    date_y = loc_y + int(height * 0.018)
-    draw.text((margin_x, date_y), ", ____________  de  ____________  de  ____________", font=regular_font, fill="black")
-
-    sign_label_y = date_y + int(height * 0.055)
-    line_y = sign_label_y + int(height * 0.05)
+    line_y = loc_y + getattr(regular_font, "size", 18) + 2
+    draw.line((loc_line_x, line_y, loc_line_x + loc_line_w, line_y), fill="black", width=2)
+    date_x = margin_x + int(width * 0.42)
+    draw.text((date_x, loc_y), ", ____________  de  ____________  de  ____________", font=regular_font, fill="black")
+    date_y = loc_y
+    sign_label_y = date_y + scale(0.055)
+    line_y = sign_label_y + scale(0.05)
     signature_width = (width - 2 * margin_x) / 3
     max_line = signature_width - int(width * 0.02)
-    labels = ["ASSINATURA COLABORADOR", "ANALISTA FROTA", "GESTOR FROTA"]
+    labels = ["ASSINATURA DO COLABORADOR", "ANALISTA DE FROTA", "GESTOR DE FROTA"]
     for idx, label in enumerate(labels):
         x = margin_x + idx * signature_width
         draw.text((x + 10, sign_label_y), label, font=regular_font, fill="black")
         draw.line((x + 5, line_y, x + 5 + max_line, line_y), fill="black", width=2)
 
-    obs_y = line_y + int(height * 0.03)
+    obs_y = line_y + scale(0.03)
     obs_text = (
-        "OBSERVACAO: Nos termos da Convencao Coletiva a diaria de viagem e destinada apenas ao colaborador "
-        "que exercer atividade fora da base consideranao cada periodo modular de 24 horas, "
-        "o recebimenao da diaria exclui-se o pagamenao da ajuda de alimentacao (Ticket)."
+        "OBSERVAÇÃO: NOS TERMOS DA CONVENÇÃO COLETIVA, A DIÁRIA DE VIAGEM É DESTINADA AO COLABORADOR "
+        "QUE EXERCE ATIVIDADE FORA DA BASE. CONSIDERA-SE CADA PERÍODO MODULAR DE 24 HORAS. "
+        "O RECEBIMENTO DA DIÁRIA EXCLUI O PAGAMENTO DA AJUDA DE ALIMENTAÇÃO (TICKET)."
     )
-    obs_line_height = getattr(small_font, "size", 18) + 4
+    obs_line_height = int(getattr(small_font, "size", 18) + 4 * font_scale)
     draw_wrapped_text(draw, obs_text, margin_x, obs_y, small_font, width - 2 * margin_x, obs_line_height)
 
     buffer = BytesIO()
@@ -613,15 +618,33 @@ def _open_print_window(images: list[bytes]) -> None:
                                     width: auto;
                                     height: auto;
                                     display: block;
-                                    }} 
+                                }}
                             </style>
                         </head>
-                        <body>{wrappers}</body>
+                        <body>
+                            {wrappers}
+                            <script>
+                                const imgs = Array.from(document.querySelectorAll('img'));
+                                let done = 0;
+                                const finish = () => {{ window.focus(); window.print(); }};
+                                if (!imgs.length) {{ finish(); }}
+                                imgs.forEach(img => {{
+                                    if (img.complete) {{
+                                        done++;
+                                        if (done === imgs.length) finish();
+                                    }} else {{
+                                        img.onload = img.onerror = () => {{
+                                            done++;
+                                            if (done === imgs.length) finish();
+                                        }};
+                                    }}
+                                }});
+                                setTimeout(finish, 1500);
+                            <\/script>
+                        </body>
                     </html>
                 `);
                 w.document.close();
-                w.focus();
-                w.print();
             }} else {{
                 alert('Habilite pop-ups para imprimir o RDV.');
             }}
@@ -674,18 +697,19 @@ def ensure_session_state() -> None:
 # -------------------- UI helpers --------------------
 
 
+
 def get_default_quinzena() -> tuple[date, date]:
-    """Retorna a quinzena padrão, alinhada a blocos de 13 dias a partir de 24/11/2025."""
-    duration = timedelta(days=12)  # 13 dias incluindo início/fim
+    """Retorna a quinzena padrão de 13 dias iniciando no dia 5 e sem começar em domingos."""
+    duration = timedelta(days=12)  # 13 dias contando início/fim
     today = date.today()
-    anchor = date(2025, 11, 24)  # segunda-feira inicial desejada
 
-    def next_monday_on_or_after(d: date) -> date:
-        while d.weekday() != 0:  # 0 = segunda
-            d += timedelta(days=1)
-        return d
+    def next_start_after(d: date) -> date:
+        start = d + timedelta(days=1)
+        if start.weekday() == 6:  # domingo -> pula para segunda
+            start += timedelta(days=1)
+        return start
 
-    # Se já houver RDV, continuamos a partir do último fim registrado.
+    # Se já houver RDV salvo, continua a partir do final do último.
     with get_connection() as conn:
         cur = conn.cursor()
         cur.execute("SELECT data_final FROM rdv ORDER BY id DESC LIMIT 1")
@@ -694,19 +718,30 @@ def get_default_quinzena() -> tuple[date, date]:
     if last:
         try:
             last_final = datetime.fromisoformat(last[0]).date()
-            candidate = next_monday_on_or_after(last_final + timedelta(days=1))
-            return candidate, candidate + duration
+            start = next_start_after(last_final)
+            end = start + duration
+            return start, end
         except Exception:
             pass
 
-    # Sem RDV salvo: usar períodos contínuos de 13 dias a partir do anchor.
-    candidate = anchor
-    if today > anchor:
-        while today > candidate + duration:
-            candidate += timedelta(days=13)
-    end = candidate + duration
-    return candidate, end
+    # Sem RDV salvo: achar a quinzena que contém hoje, partindo do dia 5.
+    def anchor_for_month(y: int, m: int) -> date:
+        return date(y, m, 5)
 
+    if today.day >= 5:
+        start = anchor_for_month(today.year, today.month)
+    else:
+        prev_year = today.year if today.month > 1 else today.year - 1
+        prev_month = today.month - 1 if today.month > 1 else 12
+        start = anchor_for_month(prev_year, prev_month)
+    if start.weekday() == 6:
+        start += timedelta(days=1)
+
+    while today > start + duration:
+        start = next_start_after(start + duration)
+
+    end = start + duration
+    return start, end
 
 def render_generated_image(page: str) -> None:
     data = st.session_state.get("generated_image_data")
@@ -785,10 +820,8 @@ def pagina_novo_rdv() -> None:
     if data_final < data_inicial:
         st.error("A data final deve ser igual ou posterior a inicial.")
         return
-    adiantamento_flag = st.checkbox("Houve adiantamento de diaria?")
+    adiantamento_flag = False
     valor_adiantamento = 0.0
-    if adiantamento_flag:
-        valor_adiantamento = st.number_input("Valor do adiantamento (R$)", min_value=0.0, value=0.0, step=10.0, format="%f")
 
     if modo == "Individual":
         nomes = [c["nome"] for c in colaboradores]
@@ -979,16 +1012,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
-
-
-
-
-
-
-
-
-
-
-
-
