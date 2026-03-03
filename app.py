@@ -440,7 +440,11 @@ def load_font(size: int, bold: bool = False) -> ImageFont.ImageFont:
             return ImageFont.truetype(font_path, size)
         except Exception:
             continue
-    return ImageFont.load_default()
+    try:
+        # Pillow recente permite tamanho customizado no fallback.
+        return ImageFont.load_default(size=size)
+    except TypeError:
+        return ImageFont.load_default()
 
 
 def measure_text_width(draw, text, font) -> float:
