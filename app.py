@@ -3,7 +3,6 @@ import base64
 import math
 import os
 import sqlite3
-import unicodedata
 from datetime import date, datetime, timedelta
 from io import BytesIO
 from pathlib import Path
@@ -449,9 +448,7 @@ def load_font(size: int, bold: bool = False) -> ImageFont.ImageFont:
 
 
 def normalize_report_text(text) -> str:
-    raw = "" if text is None else str(text)
-    normalized = unicodedata.normalize("NFKD", raw)
-    return normalized.encode("ascii", "ignore").decode("ascii")
+    return "" if text is None else str(text)
 
 
 def draw_text_safe(draw, position, text, font, fill="black") -> None:
@@ -855,7 +852,7 @@ def pagina_colaboradores() -> None:
     st.header("Colaboradores (Neon)")
     neon_ok = neon_available()
     if not neon_ok:
-        st.info("Neon nao configurado. Mostrando lista somente para referencia (nao editavel).")
+        st.info("Neon não configurado. Mostrando lista somente para referência (não editável).")
     col1, col2 = st.columns([3, 1])
     with col1:
         nome_novo = st.text_input("Nome do colaborador")
@@ -888,7 +885,7 @@ def pagina_colaboradores() -> None:
     with cols_btn[1]:
         if st.button("Excluir", disabled=not neon_ok):
             neon_delete_colaborador(int(csel.get("id", 0)))
-            st.warning("Excluido.")
+            st.warning("Excluído.")
             st.rerun()
 
     st.subheader("Lista")
@@ -903,7 +900,7 @@ def pagina_novo_rdv() -> None:
         st.warning("Nenhum colaborador para este tipo.")
         return
     modo_all_label = f"Todos os {tipo.lower()}s"
-    modo = st.radio("Modo de Geracao", ["Individual", modo_all_label], horizontal=True)
+    modo = st.radio("Modo de Geração", ["Individual", modo_all_label], horizontal=True)
     data_ini, data_fim = get_default_quinzena()
     data_inicial = st.date_input("Data inicial", value=data_ini)
     data_final = st.date_input("Data final", value=data_fim)
@@ -1032,7 +1029,7 @@ def pagina_novo_rdv() -> None:
 
 
 def pagina_relatorios() -> None:
-    st.header("Relatorios salvos")
+    st.header("Relatórios salvos")
     rdvs = get_rdvs()
     if not rdvs:
         st.info("Nenhum RDV salvo.")
@@ -1113,8 +1110,8 @@ def pagina_relatorios() -> None:
             f"{datetime.fromisoformat(rdv_data['data_inicial']).strftime('%Y%m%d')}-"
             f"{datetime.fromisoformat(rdv_data['data_final']).strftime('%Y%m%d')}.png"
         )
-        st.session_state["generated_image_page"] = "Relatorios salvos"
-    render_generated_image("Relatorios salvos")
+        st.session_state["generated_image_page"] = "Relatórios salvos"
+    render_generated_image("Relatórios salvos")
 
 
 def main() -> None:
@@ -1129,9 +1126,9 @@ def main() -> None:
         else:
             st.markdown("JR")
     with title_col:
-        st.title("Relatorio de Despesas de Viagem - RDV JR")
+        st.title("Relatório de Despesas de Viagem - RDV JR")
 
-    menu_opcoes = ["Novo RDV", "Colaboradores", "Relatorios salvos"]
+    menu_opcoes = ["Novo RDV", "Colaboradores", "Relatórios salvos"]
     page = st.sidebar.selectbox("Menu", menu_opcoes, key="page_selector")
     if page == "Novo RDV":
         pagina_novo_rdv()
