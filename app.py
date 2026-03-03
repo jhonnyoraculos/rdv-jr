@@ -795,46 +795,23 @@ def ensure_session_state() -> None:
 
 
 def get_default_quinzena() -> tuple[date, date]:
-    """Retorna a quinzena padrão de 13 dias iniciando no dia 5 e sem começar em domingos."""
+    """Retorna a quinzena padrão de 13 dias iniciando no dia 2."""
     duration = timedelta(days=12)  # 13 dias contando início/fim
     today = date.today()
 
-    def next_start_after(d: date) -> date:
-        start = d + timedelta(days=1)
-        if start.weekday() == 6:  # domingo -> pula para segunda
-            start += timedelta(days=1)
-        return start
-
-    # Se já houver RDV salvo, continua a partir do final do último.
-    with get_connection() as conn:
-        cur = conn.cursor()
-        cur.execute("SELECT data_final FROM rdv ORDER BY id DESC LIMIT 1")
-        last = cur.fetchone()
-
-    if last:
-        try:
-            last_final = datetime.fromisoformat(last[0]).date()
-            start = next_start_after(last_final)
-            end = start + duration
-            return start, end
-        except Exception:
-            pass
-
-    # Sem RDV salvo: achar a quinzena que contém hoje, partindo do dia 5.
     def anchor_for_month(y: int, m: int) -> date:
-        return date(y, m, 5)
+        return date(y, m, 2)
 
-    if today.day >= 5:
+    # Base fixa mensal (não depende do último RDV salvo).
+    if today.day >= 2:
         start = anchor_for_month(today.year, today.month)
     else:
         prev_year = today.year if today.month > 1 else today.year - 1
         prev_month = today.month - 1 if today.month > 1 else 12
         start = anchor_for_month(prev_year, prev_month)
-    if start.weekday() == 6:
-        start += timedelta(days=1)
 
     while today > start + duration:
-        start = next_start_after(start + duration)
+        start += timedelta(days=13)
 
     end = start + duration
     return start, end
