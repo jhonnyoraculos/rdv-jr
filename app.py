@@ -3,6 +3,7 @@ import base64
 import math
 import os
 import sqlite3
+import unicodedata
 from datetime import date, datetime, timedelta
 from io import BytesIO
 from pathlib import Path
@@ -447,7 +448,18 @@ def load_font(size: int, bold: bool = False) -> ImageFont.ImageFont:
         return ImageFont.load_default()
 
 
+def normalize_report_text(text) -> str:
+    raw = "" if text is None else str(text)
+    normalized = unicodedata.normalize("NFKD", raw)
+    return normalized.encode("ascii", "ignore").decode("ascii")
+
+
+def draw_text_safe(draw, position, text, font, fill="black") -> None:
+    draw.text(position, normalize_report_text(text), font=font, fill=fill)
+
+
 def measure_text_width(draw, text, font) -> float:
+    text = normalize_report_text(text)
     try:
         bbox = draw.textbbox((0, 0), text, font=font)
         return bbox[2] - bbox[0]
@@ -456,11 +468,13 @@ def measure_text_width(draw, text, font) -> float:
 
 
 def draw_text_centered(draw, text, x_center, y, font, fill="black") -> None:
+    text = normalize_report_text(text)
     width = measure_text_width(draw, text, font)
     draw.text((x_center - width / 2, y), text, font=font, fill=fill)
 
 
 def draw_wrapped_text(draw, text, x, y, font, max_width, line_height: float) -> None:
+    text = normalize_report_text(text)
     words = text.split()
     line = ""
     for word in words:
@@ -522,12 +536,12 @@ def generate_image(
     )
     draw_text_centered(draw, title, width / 2, y_cursor - scale(0.028), title_font)
 
-    draw.text((margin_x, y_cursor), f"NOME: {colaborador_nome}", font=bold_font, fill="black")
-    draw.text(
+    draw_text_safe(draw, (margin_x, y_cursor), f"NOME: {colaborador_nome}", bold_font)
+    draw_text_safe(
+        draw,
         (width * 0.5, y_cursor),
         f"DATA QUINZENA (INÍCIO E FINAL): {format_date_br(data_inicial)} a {format_date_br(data_final)}",
-        font=regular_font,
-        fill="black",
+        regular_font,
     )
     y_cursor += scale(0.02)
     if adiantamento is True:
@@ -541,14 +555,14 @@ def generate_image(
         sim_mark = " "
     pergunta_txt = f"HOUVE ADIANTAMENTO DE DIÁRIA? ( {nao_mark} ) NÃO ( {sim_mark} ) SIM"
     pergunta_w = measure_text_width(draw, pergunta_txt, regular_font)
-    draw.text((margin_x, y_cursor), pergunta_txt, font=regular_font, fill="black")
+    draw_text_safe(draw, (margin_x, y_cursor), pergunta_txt, regular_font)
     spacing = int(width * 0.05)
     right_x = margin_x + pergunta_w + spacing
     if adiantamento is True:
         valor_txt = format_currency(valor_adiantamento).replace("R$ ", "")
     else:
         valor_txt = "_____________________"
-    draw.text((right_x, y_cursor), f"NO VALOR DE R$ {valor_txt}", font=regular_font, fill="black")
+    draw_text_safe(draw, (right_x, y_cursor), f"NO VALOR DE R$ {valor_txt}", regular_font)
     y_cursor += scale(0.02)
 
     table_left = margin_x
@@ -593,7 +607,7 @@ def generate_image(
     draw.line((table_left, table_top + row_height, table_right, table_top + row_height), fill="black", width=3)
     for header, _, left, right in col_positions:
         draw.line((left, table_top, left, table_bottom), fill="black", width=2)
-        draw.text((left + int(width * 0.0025), table_top + int(row_height * 0.22)), header, font=header_font, fill="black")
+        draw_text_safe(draw, (left + int(width * 0.0025), table_top + int(row_height * 0.22)), header, header_font)
     draw.line((table_right, table_top, table_right, table_bottom), fill="black", width=3)
 
     for idx, linha in enumerate(linhas):
@@ -618,24 +632,23 @@ def generate_image(
                     text = format_currency(num)
             else:
                 text = "" if value in (None, "") else str(value)
-            draw.text((left + int(width * 0.0025), y + int(row_height * 0.18)), text, font=regular_font, fill="black")
+            draw_text_safe(draw, (left + int(width * 0.0025), y + int(row_height * 0.18)), text, regular_font)
         if is_domingo:
             draw.line((table_left, y + row_height / 2, table_right, y + row_height / 2), fill="black", width=2)
     for _, _, _, right in col_positions:
         draw.line((right, table_top, right, table_bottom), fill="black", width=2)
 
     total_y = table_bottom + scale(0.012)
-    total_valor = format_currency(sum_total(linhas))
-    draw.text((table_left, total_y), f"TOTAL DA QUINZENA EM R$ -----> {total_valor}", font=header_font, fill="black")
+    draw_text_safe(draw, (table_left, total_y), "TOTAL DA QUINZENA EM R$ -----> R$ __________________", header_font)
 
     loc_y = total_y + scale(0.03)
     loc_line_x = margin_x + int(width * 0.11)
     loc_line_w = int(width * 0.22)
-    draw.text((margin_x, loc_y), "LOCAL/DATA:", font=regular_font, fill="black")
+    draw_text_safe(draw, (margin_x, loc_y), "LOCAL/DATA:", regular_font)
     line_y = loc_y + getattr(regular_font, "size", 18) + 2
     draw.line((loc_line_x, line_y, loc_line_x + loc_line_w, line_y), fill="black", width=2)
     date_x = margin_x + int(width * 0.42)
-    draw.text((date_x, loc_y), ", ____________  de  ____________  de  ____________", font=regular_font, fill="black")
+    draw_text_safe(draw, (date_x, loc_y), ", ____________  de  ____________  de  ____________", regular_font)
     date_y = loc_y
     sign_label_y = date_y + scale(0.055)
     line_y = sign_label_y + scale(0.05)
@@ -644,7 +657,7 @@ def generate_image(
     labels = ["ASSINATURA DO COLABORADOR", "ANALISTA DE FROTA", "GESTOR DE FROTA"]
     for idx, label in enumerate(labels):
         x = margin_x + idx * signature_width
-        draw.text((x + 10, sign_label_y), label, font=regular_font, fill="black")
+        draw_text_safe(draw, (x + 10, sign_label_y), label, regular_font)
         draw.line((x + 5, line_y, x + 5 + max_line, line_y), fill="black", width=2)
 
     obs_y = line_y + scale(0.03)
