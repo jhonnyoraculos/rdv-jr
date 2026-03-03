@@ -91,13 +91,15 @@ def insert_rdv(
     tipo: str,
     data_inicial: date,
     data_final: date,
-    adiantamento: bool,
+    adiantamento: Optional[bool],
     valor_adiantamento: float,
     total_quinzena: float,
     linhas: list[dict],
 ) -> None:
     with get_connection() as conn:
         cur = conn.cursor()
+        adiantamento_db = -1 if adiantamento is None else int(adiantamento)
+        valor_adiantamento_db = valor_adiantamento if adiantamento is True else 0.0
         cur.execute(
             """
             INSERT INTO rdv (
@@ -110,8 +112,8 @@ def insert_rdv(
                 tipo,
                 data_inicial.isoformat(),
                 data_final.isoformat(),
-                int(adiantamento),
-                valor_adiantamento,
+                adiantamento_db,
+                valor_adiantamento_db,
                 total_quinzena,
             ),
         )
@@ -152,19 +154,26 @@ def get_rdvs() -> list[dict]:
             """
         )
         rows = cur.fetchall()
-    return [
-        {
-            "id": r[0],
-            "nome": r[1],
-            "tipo": r[2],
-            "data_inicial": r[3],
-            "data_final": r[4],
-            "adiantamento": bool(r[5]),
-            "valor_adiantamento": r[6],
-            "total_quinzena": r[7],
-        }
-        for r in rows
-    ]
+    resultados = []
+    for r in rows:
+        raw_adiantamento = r[5]
+        if raw_adiantamento is None or raw_adiantamento == -1:
+            adiantamento = None
+        else:
+            adiantamento = bool(raw_adiantamento)
+        resultados.append(
+            {
+                "id": r[0],
+                "nome": r[1],
+                "tipo": r[2],
+                "data_inicial": r[3],
+                "data_final": r[4],
+                "adiantamento": adiantamento,
+                "valor_adiantamento": r[6],
+                "total_quinzena": r[7],
+            }
+        )
+    return resultados
 
 
 def get_rdv_linhas(rdv_id: int) -> list[dict]:
@@ -191,6 +200,47 @@ def get_rdv_linhas(rdv_id: int) -> list[dict]:
         }
         for r in rows
     ]
+
+
+def update_rdv(
+    rdv_id: int,
+    total_quinzena: float,
+    linhas: list[dict],
+    adiantamento: Optional[bool],
+    valor_adiantamento: float,
+) -> None:
+    with get_connection() as conn:
+        cur = conn.cursor()
+        adiantamento_db = -1 if adiantamento is None else int(adiantamento)
+        valor_adiantamento_db = valor_adiantamento if adiantamento is True else 0.0
+        cur.execute(
+            "UPDATE rdv SET total_quinzena = ?, adiantamento = ?, valor_adiantamento = ? WHERE id = ?",
+            (total_quinzena, adiantamento_db, valor_adiantamento_db, rdv_id),
+        )
+        cur.execute("DELETE FROM rdv_linhas WHERE rdv_id = ?", (rdv_id,))
+        valores = []
+        for linha in linhas:
+            valores.append(
+                (
+                    rdv_id,
+                    linha.get("DATA"),
+                    linha.get("CIDADE") or "",
+                    linha.get("HOTEL"),
+                    linha.get("VALOR_HOTEL"),
+                    linha.get("DIARIA_EM_VIAGEM") or 0,
+                    linha.get("TICKET_ALIMENTACAO") or 0,
+                )
+            )
+        if valores:
+            cur.executemany(
+                """
+                INSERT INTO rdv_linhas (
+                    rdv_id, data, cidade, hotel, valor_hotel, diaria_viagem, ticket_alimentacao
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                valores,
+            )
+        conn.commit()
 
 
 # -------------------- neon colaboradores --------------------
@@ -352,13 +402,45 @@ def to_float(value) -> float:
 
 
 def load_font(size: int, bold: bool = False) -> ImageFont.ImageFont:
-    try:
-        win_font = Path("C:/Windows/Fonts/arialbd.ttf" if bold else "C:/Windows/Fonts/arial.ttf")
-        if win_font.exists():
-            return ImageFont.truetype(str(win_font), size)
-        return ImageFont.truetype("DejaVuSans-Bold.ttf" if bold else "DejaVuSans.ttf", size)
-    except Exception:
-        return ImageFont.load_default()
+    candidates: list[str] = []
+    win_fonts = Path(os.environ.get("WINDIR", r"C:\Windows")) / "Fonts"
+    if bold:
+        candidates.extend(
+            [
+                str(win_fonts / "arialbd.ttf"),
+                str(win_fonts / "segoeuib.ttf"),
+                str(win_fonts / "calibrib.ttf"),
+                "arialbd.ttf",
+                "DejaVuSans-Bold.ttf",
+                "LiberationSans-Bold.ttf",
+                "NotoSans-Bold.ttf",
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+                "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+                "/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf",
+            ]
+        )
+    else:
+        candidates.extend(
+            [
+                str(win_fonts / "arial.ttf"),
+                str(win_fonts / "segoeui.ttf"),
+                str(win_fonts / "calibri.ttf"),
+                "arial.ttf",
+                "DejaVuSans.ttf",
+                "LiberationSans-Regular.ttf",
+                "NotoSans-Regular.ttf",
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+                "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+                "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
+            ]
+        )
+
+    for font_path in candidates:
+        try:
+            return ImageFont.truetype(font_path, size)
+        except Exception:
+            continue
+    return ImageFont.load_default()
 
 
 def measure_text_width(draw, text, font) -> float:
@@ -397,7 +479,7 @@ def generate_image(
     tipo: str,
     data_inicial: date,
     data_final: date,
-    adiantamento: bool,
+    adiantamento: Optional[bool],
     valor_adiantamento: float,
     linhas: list[dict],
     mostrar_valores: bool = False,
@@ -444,12 +526,25 @@ def generate_image(
         fill="black",
     )
     y_cursor += scale(0.02)
-    pergunta_txt = "HOUVE ADIANTAMENTO DE DIÁRIA? (   ) NÃO (   ) SIM"
+    if adiantamento is True:
+        nao_mark = " "
+        sim_mark = "X"
+    elif adiantamento is False:
+        nao_mark = "X"
+        sim_mark = " "
+    else:
+        nao_mark = " "
+        sim_mark = " "
+    pergunta_txt = f"HOUVE ADIANTAMENTO DE DIÁRIA? ( {nao_mark} ) NÃO ( {sim_mark} ) SIM"
     pergunta_w = measure_text_width(draw, pergunta_txt, regular_font)
     draw.text((margin_x, y_cursor), pergunta_txt, font=regular_font, fill="black")
     spacing = int(width * 0.05)
     right_x = margin_x + pergunta_w + spacing
-    draw.text((right_x, y_cursor), "NO VALOR DE R$ _____________________", font=regular_font, fill="black")
+    if adiantamento is True:
+        valor_txt = format_currency(valor_adiantamento).replace("R$ ", "")
+    else:
+        valor_txt = "_____________________"
+    draw.text((right_x, y_cursor), f"NO VALOR DE R$ {valor_txt}", font=regular_font, fill="black")
     y_cursor += scale(0.02)
 
     table_left = margin_x
@@ -526,7 +621,8 @@ def generate_image(
         draw.line((right, table_top, right, table_bottom), fill="black", width=2)
 
     total_y = table_bottom + scale(0.012)
-    draw.text((table_left, total_y), "TOTAL DA QUINZENA EM R$ -----> R$ __________________", font=header_font, fill="black")
+    total_valor = format_currency(sum_total(linhas))
+    draw.text((table_left, total_y), f"TOTAL DA QUINZENA EM R$ -----> {total_valor}", font=header_font, fill="black")
 
     loc_y = total_y + scale(0.03)
     loc_line_x = margin_x + int(width * 0.11)
@@ -660,7 +756,7 @@ def _open_print_window(images: list[bytes]) -> None:
 def sum_total(rows: list[dict]) -> float:
     total = 0.0
     for row in rows:
-        for key in ("DIARIA_EM_VIAGEM", "TICKET_ALIMENTACAO", "VALOR_HOTEL"):
+        for key in ("DIARIA_EM_VIAGEM", "TICKET_ALIMENTACAO"):
             total += to_float(row.get(key, 0))
     return total
 
@@ -820,7 +916,7 @@ def pagina_novo_rdv() -> None:
     if data_final < data_inicial:
         st.error("A data final deve ser igual ou posterior a inicial.")
         return
-    adiantamento_flag = False
+    adiantamento_flag = None
     valor_adiantamento = 0.0
 
     if modo == "Individual":
@@ -828,7 +924,8 @@ def pagina_novo_rdv() -> None:
         nome_escolhido = st.selectbox("Colaborador", nomes)
         colaborador = next(c for c in colaboradores if c["nome"] == nome_escolhido)
         if st.button("Gerar tabela da quinzena"):
-            st.session_state["rdv_table"] = build_table_dataframe(tipo, data_inicial, data_final)
+            tabela = build_table_dataframe(tipo, data_inicial, data_final)
+            st.session_state["rdv_table"] = tabela
             st.session_state["rdv_meta"] = {
                 "tipo": tipo,
                 "colaborador_nome": colaborador["nome"],
@@ -840,7 +937,9 @@ def pagina_novo_rdv() -> None:
         df = st.session_state.get("rdv_table")
         if df is not None:
             column_config = {"DATA": st.column_config.Column("Data", disabled=True)}
-            st.session_state["rdv_table"] = st.data_editor(df, column_config=column_config, use_container_width=True)
+            st.session_state["rdv_table"] = st.data_editor(
+                df, column_config=column_config, use_container_width=True
+            )
             df = st.session_state["rdv_table"]
             total = sum_total(df.to_dict("records"))
             st.markdown(f"**TOTAL DA QUINZENA EM R$:** {format_currency(total)}")
@@ -955,25 +1054,63 @@ def pagina_relatorios() -> None:
         f"**Colaborador:** {rdv_data['nome']} | **Tipo:** {rdv_data['tipo']} | "
         f"**Quinzena:** {format_date_br(rdv_data['data_inicial'])} a {format_date_br(rdv_data['data_final'])}"
     )
-    st.markdown(
-        f"**Total da quinzena:** {format_currency(rdv_data['total_quinzena'])} | "
-        f"**adiantamento:** {'Sim' if rdv_data['adiantamento'] else 'nao'} "
-        f"{format_currency(rdv_data['valor_adiantamento']) if rdv_data['adiantamento'] else ''}"
-    )
-    df = pd.DataFrame(linhas)
+    st.markdown(f"**Total da quinzena:** {format_currency(rdv_data['total_quinzena'])}")
+    adiantamento_flag = None
+    valor_adiantamento = 0.0
+    linhas_display = []
+    for linha in linhas:
+        linha_copy = linha.copy()
+        linha_copy["DATA"] = format_date_br(linha_copy.get("DATA", ""))
+        linhas_display.append(linha_copy)
+    df = pd.DataFrame(linhas_display)
+    column_config = {"DATA": st.column_config.Column("Data", disabled=True)}
     if rdv_data["tipo"] == "MOTORISTA":
-        st.dataframe(df[["DATA", "CIDADE", "DIARIA_EM_VIAGEM", "TICKET_ALIMENTACAO"]])
+        cols = ["DATA", "CIDADE", "DIARIA_EM_VIAGEM", "TICKET_ALIMENTACAO"]
     else:
-        st.dataframe(df[["DATA", "CIDADE", "HOTEL", "VALOR_HOTEL", "DIARIA_EM_VIAGEM", "TICKET_ALIMENTACAO"]])
+        cols = ["DATA", "CIDADE", "HOTEL", "VALOR_HOTEL", "DIARIA_EM_VIAGEM", "TICKET_ALIMENTACAO"]
+    df = df.reindex(columns=cols)
+    edited_df = st.data_editor(
+        df[cols],
+        column_config=column_config,
+        use_container_width=True,
+        key=f"rdv_edit_{rdv_data['id']}",
+    )
+    total_editado = sum_total(edited_df.to_dict("records"))
+    st.markdown(f"**TOTAL DA QUINZENA EM R$:** {format_currency(total_editado)}")
+    linhas_update = []
+    for _, row in edited_df.iterrows():
+        data_val = row.get("DATA")
+        parsed = try_parse_date(data_val)
+        data_iso = parsed.isoformat() if parsed else str(data_val)
+        linhas_update.append(
+            {
+                "DATA": data_iso,
+                "CIDADE": row.get("CIDADE", ""),
+                "HOTEL": row.get("HOTEL") if rdv_data["tipo"] == "AJUDANTE" else None,
+                "VALOR_HOTEL": to_float(row.get("VALOR_HOTEL")) if rdv_data["tipo"] == "AJUDANTE" else None,
+                "DIARIA_EM_VIAGEM": to_float(row.get("DIARIA_EM_VIAGEM")),
+                "TICKET_ALIMENTACAO": to_float(row.get("TICKET_ALIMENTACAO")),
+            }
+        )
+    if st.button("Salvar alterações", key=f"save_{rdv_data['id']}"):
+        update_rdv(
+            rdv_data["id"],
+            total_editado,
+            linhas_update,
+            adiantamento_flag,
+            valor_adiantamento if adiantamento_flag else 0.0,
+        )
+        st.success("RDV atualizado.")
+        st.rerun()
     if st.button("Gerar imagem do RDV (PNG)"):
         img_buffer = generate_image(
             colaborador_nome=rdv_data["nome"],
             tipo=rdv_data["tipo"],
             data_inicial=datetime.fromisoformat(rdv_data["data_inicial"]).date(),
             data_final=datetime.fromisoformat(rdv_data["data_final"]).date(),
-            adiantamento=rdv_data["adiantamento"],
-            valor_adiantamento=rdv_data["valor_adiantamento"],
-            linhas=linhas,
+            adiantamento=adiantamento_flag,
+            valor_adiantamento=valor_adiantamento if adiantamento_flag else 0.0,
+            linhas=linhas_update,
             mostrar_valores=True,
         )
         st.session_state["generated_image_data"] = img_buffer.getvalue()
