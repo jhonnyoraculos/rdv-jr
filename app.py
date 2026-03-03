@@ -843,7 +843,7 @@ def render_generated_image(page: str) -> None:
     data = st.session_state.get("generated_image_data")
     where = st.session_state.get("generated_image_page")
     if data and where == page:
-        st.image(data, use_container_width=True)
+        st.image(data, use_column_width=True)
         st.download_button(
             "Baixar RDV (PNG)",
             data=data,
@@ -1022,7 +1022,7 @@ def pagina_novo_rdv() -> None:
         if batch.get("tipo") == tipo:
             for idx, preview in enumerate(batch["previews"]):
                 st.subheader(preview["nome"])
-                st.image(preview["image"], use_container_width=True)
+                st.image(preview["image"], use_column_width=True)
                 st.download_button(
                     "Baixar RDV (PNG)",
                     data=preview["image"],
@@ -1131,7 +1131,7 @@ def main() -> None:
     logo_col, title_col = st.columns([1, 5])
     with logo_col:
         if LOGO_PATH.exists():
-            st.image(LOGO_PATH, width=80)
+            st.image(str(LOGO_PATH), width=80)
         else:
             st.markdown("JR")
     with title_col:
