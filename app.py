@@ -19,6 +19,7 @@ from PIL import Image, ImageDraw, ImageFont
 BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = BASE_DIR / "rdv.db"
 LOGO_PATH = BASE_DIR / "logo-jr.png"
+FONTS_DIR = BASE_DIR / "fonts"
 RESAMPLE_FILTER = Image.Resampling.LANCZOS if hasattr(Image, "Resampling") else Image.ANTIALIAS
 
 # A4 em paisagem @300dpi
@@ -404,9 +405,13 @@ def to_float(value) -> float:
 def load_font(size: int, bold: bool = False) -> ImageFont.ImageFont:
     candidates: list[str] = []
     win_fonts = Path(os.environ.get("WINDIR", r"C:\Windows")) / "Fonts"
+    local_regular = FONTS_DIR / "NotoSans-Regular.ttf"
+    local_bold = FONTS_DIR / "NotoSans-Bold.ttf"
+
     if bold:
         candidates.extend(
             [
+                str(local_bold),
                 str(win_fonts / "arialbd.ttf"),
                 str(win_fonts / "segoeuib.ttf"),
                 str(win_fonts / "calibrib.ttf"),
@@ -422,6 +427,7 @@ def load_font(size: int, bold: bool = False) -> ImageFont.ImageFont:
     else:
         candidates.extend(
             [
+                str(local_regular),
                 str(win_fonts / "arial.ttf"),
                 str(win_fonts / "segoeui.ttf"),
                 str(win_fonts / "calibri.ttf"),
