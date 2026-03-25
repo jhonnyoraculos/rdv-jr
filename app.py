@@ -859,18 +859,29 @@ def pagina_colaboradores() -> None:
     neon_ok = neon_available()
     if not neon_ok:
         st.info("Neon não configurado. Mostrando lista somente para referência (não editável).")
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        nome_novo = st.text_input("Nome do colaborador")
-    with col2:
-        tipo_novo = st.selectbox("Tipo", TIPOS_COLABORADOR, key="tipo_novo")
-    if st.button("Salvar colaborador", disabled=not neon_ok):
-        if not nome_novo.strip():
-            st.error("Informe o nome.")
-        else:
-            neon_insert_colaborador(nome_novo, tipo_novo)
-            st.success("Colaborador salvo.")
-            st.rerun()
+    with st.container(border=True):
+        st.subheader("Novo cadastro")
+        st.caption("Cadastre um colaborador informando nome e tipo.")
+        with st.form("form_novo_colaborador", clear_on_submit=True, border=False):
+            col1, col2 = st.columns([3, 1])
+            with col1:
+                nome_novo = st.text_input("Nome do colaborador")
+            with col2:
+                tipo_novo = st.selectbox("Tipo", TIPOS_COLABORADOR, key="tipo_novo")
+            salvar = st.form_submit_button(
+                "Salvar colaborador",
+                type="primary",
+                disabled=not neon_ok,
+                use_container_width=True,
+            )
+
+        if salvar:
+            if not nome_novo.strip():
+                st.error("Informe o nome.")
+            else:
+                neon_insert_colaborador(nome_novo, tipo_novo)
+                st.success("Colaborador salvo.")
+                st.rerun()
 
     colabs = get_all_colaboradores()
     if not colabs:
@@ -878,19 +889,54 @@ def pagina_colaboradores() -> None:
         return
 
     nomes_map = {f"{c.get('nome')} ({c.get('tipo')})": c for c in colabs}
-    selecionado = st.selectbox("Editar/Excluir", list(nomes_map.keys()))
-    csel = nomes_map[selecionado]
-    novo_nome = st.text_input("Nome", value=csel.get("nome", ""), key="edit_nome")
-    novo_tipo = st.selectbox("Tipo", TIPOS_COLABORADOR, index=TIPOS_COLABORADOR.index(csel.get("tipo", "MOTORISTA")), key="edit_tipo")
-    cols_btn = st.columns(2)
-    with cols_btn[0]:
-            if st.button("Atualizar", disabled=not neon_ok):
-                neon_update_colaborador(int(csel.get("id", 0)), novo_nome, novo_tipo)
+    with st.container(border=True):
+        st.subheader("Editar ou excluir")
+        st.caption("Selecione um colaborador para atualizar os dados ou remover o cadastro.")
+
+        selecionado = st.selectbox("Colaborador", list(nomes_map.keys()), key="colab_selecionado")
+        csel = nomes_map[selecionado]
+        colaborador_id = int(csel.get("id", 0))
+        tipo_atual = csel.get("tipo", "MOTORISTA")
+        if tipo_atual not in TIPOS_COLABORADOR:
+            tipo_atual = TIPOS_COLABORADOR[0]
+
+        if st.session_state.get("edit_selected_id") != colaborador_id:
+            st.session_state["edit_selected_id"] = colaborador_id
+            st.session_state["edit_nome"] = csel.get("nome", "")
+            st.session_state["edit_tipo"] = tipo_atual
+
+        with st.form("form_editar_colaborador", border=False):
+            col1, col2 = st.columns([3, 1])
+            with col1:
+                novo_nome = st.text_input("Nome", key="edit_nome")
+            with col2:
+                novo_tipo = st.selectbox("Tipo", TIPOS_COLABORADOR, key="edit_tipo")
+
+            btn_atualizar, btn_excluir = st.columns(2)
+            with btn_atualizar:
+                atualizar = st.form_submit_button(
+                    "Atualizar",
+                    type="primary",
+                    disabled=not neon_ok,
+                    use_container_width=True,
+                )
+            with btn_excluir:
+                excluir = st.form_submit_button(
+                    "Excluir",
+                    disabled=not neon_ok,
+                    use_container_width=True,
+                )
+
+        if atualizar:
+            if not novo_nome.strip():
+                st.error("Informe o nome.")
+            else:
+                neon_update_colaborador(colaborador_id, novo_nome, novo_tipo)
                 st.success("Atualizado.")
                 st.rerun()
-    with cols_btn[1]:
-        if st.button("Excluir", disabled=not neon_ok):
-            neon_delete_colaborador(int(csel.get("id", 0)))
+
+        if excluir:
+            neon_delete_colaborador(colaborador_id)
             st.warning("Excluído.")
             st.rerun()
 
