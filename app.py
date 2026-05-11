@@ -4,6 +4,7 @@ import math
 import os
 import sqlite3
 from datetime import date, datetime, timedelta
+from html import escape
 from io import BytesIO
 from pathlib import Path
 from typing import Optional
@@ -42,8 +43,93 @@ neon_DB = os.getenv("NEON_DB")
 COLABORADORES_FALLBACK: list[dict] = []
 
 TIPOS_COLABORADOR = ["MOTORISTA", "AJUDANTE"]
+QUINZENA_DIAS = 13
 
 st.set_page_config(page_title="RDV JR", layout="wide")
+
+
+def apply_ui_styles() -> None:
+    st.markdown(
+        """
+        <style>
+            .block-container {
+                max-width: 1220px;
+                padding-top: 1.5rem;
+                padding-bottom: 2rem;
+            }
+
+            h1 {
+                font-size: 2.15rem !important;
+                line-height: 1.15 !important;
+                margin-bottom: 0.5rem !important;
+            }
+
+            h2, h3 {
+                margin-top: 0.8rem !important;
+            }
+
+            .app-header {
+                display: flex;
+                align-items: center;
+                gap: 1.35rem;
+                min-height: 96px;
+                margin-bottom: 1.15rem;
+            }
+
+            .app-logo {
+                width: 92px;
+                height: 92px;
+                object-fit: contain;
+                display: block;
+                flex: 0 0 auto;
+            }
+
+            .app-logo-placeholder {
+                width: 76px;
+                height: 76px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                border-radius: 10px;
+                background: #c91432;
+                color: white;
+                font-weight: 800;
+                font-size: 1.35rem;
+            }
+
+            .app-title {
+                margin: 0;
+                color: #1f2a44;
+                font-size: 2.15rem;
+                line-height: 1.15;
+                font-weight: 700;
+            }
+
+            div[data-testid="stVerticalBlock"] {
+                gap: 0.75rem;
+            }
+
+            .rdv-preview {
+                width: 100%;
+                padding: 0.75rem 0 0.25rem;
+            }
+
+            .rdv-preview img {
+                display: block;
+                max-width: 100%;
+                max-height: 72vh;
+                width: auto;
+                height: auto;
+                margin: 0 auto;
+                border: 1px solid #d8dde6;
+                border-radius: 6px;
+                box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+                background: white;
+            }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
 # -------------------- SQLite RDV --------------------
 
@@ -83,6 +169,14 @@ def init_db() -> None:
                 diaria_viagem REAL,
                 ticket_alimentacao REAL,
                 FOREIGN KEY(rdv_id) REFERENCES rdv(id)
+            )
+            """
+        )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS app_settings (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
             )
             """
         )
@@ -756,7 +850,7 @@ def _open_print_window(images: list[bytes]) -> None:
                                     }}
                                 }});
                                 setTimeout(finish, 1500);
-                            <\/script>
+                            <\\/script>
                         </body>
                     </html>
                 `);
@@ -802,6 +896,7 @@ def build_table_dataframe(tipo: str, start_date: date, end_date: date) -> pd.Dat
 
 
 def ensure_session_state() -> None:
+    data_ini, data_fim = get_initial_quinzena()
     st.session_state.setdefault("rdv_table", None)
     st.session_state.setdefault("rdv_meta", {})
     st.session_state.setdefault("generated_image_data", None)
@@ -809,6 +904,8 @@ def ensure_session_state() -> None:
     st.session_state.setdefault("generated_image_page", "")
     st.session_state.setdefault("batch_previews", {"tipo": "", "previews": []})
     st.session_state.setdefault("page_selector", "Novo RDV")
+    st.session_state.setdefault("data_inicial_rdv", data_ini)
+    st.session_state.setdefault("data_final_rdv", data_fim)
 
 # -------------------- UI helpers --------------------
 
@@ -816,7 +913,7 @@ def ensure_session_state() -> None:
 
 def get_default_quinzena() -> tuple[date, date]:
     """Retorna a quinzena padrão de 13 dias iniciando no dia 2."""
-    duration = timedelta(days=12)  # 13 dias contando início/fim
+    duration = timedelta(days=QUINZENA_DIAS - 1)  # 13 dias contando início/fim
     today = date.today()
 
     def anchor_for_month(y: int, m: int) -> date:
@@ -831,24 +928,144 @@ def get_default_quinzena() -> tuple[date, date]:
         start = anchor_for_month(prev_year, prev_month)
 
     while today > start + duration:
-        start += timedelta(days=13)
+        start += timedelta(days=QUINZENA_DIAS)
 
     end = start + duration
     return start, end
+
+
+def get_saved_quinzena() -> Optional[tuple[date, date]]:
+    try:
+        with get_connection() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                """
+                SELECT key, value FROM app_settings
+                WHERE key IN ('quinzena_data_inicial', 'quinzena_data_final')
+                """
+            )
+            values = dict(cur.fetchall())
+    except sqlite3.Error:
+        return None
+
+    data_inicial = try_parse_date(values.get("quinzena_data_inicial"))
+    data_final = try_parse_date(values.get("quinzena_data_final"))
+    if not data_inicial or not data_final or data_final < data_inicial:
+        return None
+    return data_inicial, data_final
+
+
+def save_quinzena(data_inicial: date, data_final: date) -> None:
+    if data_final < data_inicial:
+        return
+    try:
+        with get_connection() as conn:
+            cur = conn.cursor()
+            cur.executemany(
+                "INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)",
+                [
+                    ("quinzena_data_inicial", data_inicial.isoformat()),
+                    ("quinzena_data_final", data_final.isoformat()),
+                ],
+            )
+            conn.commit()
+    except sqlite3.Error:
+        pass
+
+
+def get_initial_quinzena() -> tuple[date, date]:
+    return get_saved_quinzena() or get_default_quinzena()
+
+
+def calcular_data_final_quinzena(data_inicial: date) -> date:
+    return data_inicial + timedelta(days=QUINZENA_DIAS - 1)
+
+
+def limpar_previews_novo_rdv() -> None:
+    st.session_state["rdv_table"] = None
+    st.session_state["rdv_meta"] = {}
+    st.session_state["generated_image_data"] = None
+    st.session_state["generated_image_name"] = ""
+    st.session_state["generated_image_page"] = ""
+    st.session_state["batch_previews"] = {"tipo": "", "previews": []}
+
+
+def atualizar_data_final_quinzena() -> None:
+    data_inicial = st.session_state.get("data_inicial_rdv")
+    parsed = try_parse_date(data_inicial)
+    if parsed:
+        data_final = calcular_data_final_quinzena(parsed)
+        st.session_state["data_final_rdv"] = data_final
+        save_quinzena(parsed, data_final)
+    limpar_previews_novo_rdv()
+
+
+def salvar_quinzena_selecionada() -> None:
+    data_inicial = try_parse_date(st.session_state.get("data_inicial_rdv"))
+    data_final = try_parse_date(st.session_state.get("data_final_rdv"))
+    if data_inicial and data_final:
+        save_quinzena(data_inicial, data_final)
+    limpar_previews_novo_rdv()
+
+
+def render_image_preview(data: bytes, alt: str) -> None:
+    encoded = base64.b64encode(data).decode("ascii")
+    safe_alt = escape(alt, quote=True)
+    st.markdown(
+        f"""
+        <div class="rdv-preview">
+            <img src="data:image/png;base64,{encoded}" alt="{safe_alt}">
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_app_header() -> None:
+    if LOGO_PATH.exists():
+        logo = Image.open(LOGO_PATH).convert("RGBA")
+        padding = max(12, int(min(logo.size) * 0.18))
+        canvas = Image.new("RGBA", (logo.width + padding * 2, logo.height + padding * 2), (255, 255, 255, 0))
+        canvas.paste(logo, (padding, padding), logo)
+        logo_buffer = BytesIO()
+        canvas.save(logo_buffer, format="PNG")
+        encoded_logo = base64.b64encode(logo_buffer.getvalue()).decode("ascii")
+        logo_html = f'<img class="app-logo" src="data:image/png;base64,{encoded_logo}" alt="JR">'
+    else:
+        logo_html = '<div class="app-logo-placeholder">JR</div>'
+    st.markdown(
+        f"""
+        <div class="app-header">
+            {logo_html}
+            <h1 class="app-title">Relatório de Despesas de Viagem - RDV JR</h1>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
 
 def render_generated_image(page: str) -> None:
     data = st.session_state.get("generated_image_data")
     where = st.session_state.get("generated_image_page")
     if data and where == page:
-        st.image(data, use_column_width=True)
-        st.download_button(
-            "Baixar RDV (PNG)",
-            data=data,
-            file_name=st.session_state.get("generated_image_name", "rdv.png"),
-            mime="image/png",
-        )
-        if st.button("Imprimir RDV gerado", key=f"print_{page}"):
-            open_print_window(data)
+        file_name = st.session_state.get("generated_image_name", "rdv.png")
+        st.divider()
+        title_col, download_col, print_col = st.columns([5, 1.2, 1.2], vertical_alignment="center")
+        with title_col:
+            st.subheader("Prévia do RDV")
+            st.caption(file_name)
+        with download_col:
+            st.download_button(
+                "Baixar PNG",
+                data=data,
+                file_name=file_name,
+                mime="image/png",
+                use_container_width=True,
+            )
+        with print_col:
+            if st.button("Imprimir", key=f"print_{page}", use_container_width=True):
+                open_print_window(data)
+        render_image_preview(data, "Prévia do RDV")
 
 
 # -------------------- Paginas --------------------
@@ -946,99 +1163,89 @@ def pagina_colaboradores() -> None:
 
 def pagina_novo_rdv() -> None:
     st.header("Novo RDV")
-    tipo = st.selectbox("Tipo de colaborador", TIPOS_COLABORADOR, format_func=lambda t: "Motorista" if t == "MOTORISTA" else "Ajudante")
+    tipo_col, modo_col = st.columns([1.35, 1], vertical_alignment="bottom")
+    with tipo_col:
+        tipo = st.selectbox(
+            "Tipo de colaborador",
+            TIPOS_COLABORADOR,
+            format_func=lambda t: "Motorista" if t == "MOTORISTA" else "Ajudante",
+            key="novo_rdv_tipo",
+            on_change=limpar_previews_novo_rdv,
+        )
     colaboradores = listar_colaboradores_por_tipo(tipo)
     if not colaboradores:
         st.warning("Nenhum colaborador para este tipo.")
         return
     modo_all_label = f"Todos os {tipo.lower()}s"
-    modo = st.radio("Modo de Geração", ["Individual", modo_all_label], horizontal=True)
-    data_ini, data_fim = get_default_quinzena()
-    data_inicial = st.date_input("Data inicial", value=data_ini)
-    data_final = st.date_input("Data final", value=data_fim)
+    modo_key = "modo_geracao_rdv"
+    if st.session_state.get(modo_key) not in ("Individual", modo_all_label):
+        st.session_state[modo_key] = "Individual"
+    with modo_col:
+        modo = st.radio(
+            "Modo de Geração",
+            ["Individual", modo_all_label],
+            horizontal=True,
+            key=modo_key,
+            on_change=limpar_previews_novo_rdv,
+        )
+
+    data_col1, data_col2 = st.columns(2)
+    with data_col1:
+        data_inicial = st.date_input(
+            "Data inicial da quinzena",
+            key="data_inicial_rdv",
+            format="DD/MM/YYYY",
+            on_change=atualizar_data_final_quinzena,
+        )
+    data_inicial = try_parse_date(data_inicial) or date.today()
+    with data_col2:
+        data_final = st.date_input(
+            "Data final",
+            key="data_final_rdv",
+            format="DD/MM/YYYY",
+            on_change=salvar_quinzena_selecionada,
+        )
+    data_final = try_parse_date(data_final) or calcular_data_final_quinzena(data_inicial)
     if data_final < data_inicial:
-        st.error("A data final deve ser igual ou posterior a inicial.")
+        st.error("A data final deve ser igual ou posterior à data inicial.")
         return
+    save_quinzena(data_inicial, data_final)
     adiantamento_flag = None
     valor_adiantamento = 0.0
 
     if modo == "Individual":
         nomes = [c["nome"] for c in colaboradores]
-        nome_escolhido = st.selectbox("Colaborador", nomes)
+        colaborador_key = "colaborador_rdv"
+        if st.session_state.get(colaborador_key) not in nomes:
+            st.session_state[colaborador_key] = nomes[0]
+        nome_escolhido = st.selectbox(
+            "Colaborador",
+            nomes,
+            key=colaborador_key,
+            on_change=limpar_previews_novo_rdv,
+        )
         colaborador = next(c for c in colaboradores if c["nome"] == nome_escolhido)
-        if st.button("Gerar tabela da quinzena"):
-            tabela = build_table_dataframe(tipo, data_inicial, data_final)
-            st.session_state["rdv_table"] = tabela
-            st.session_state["rdv_meta"] = {
-                "tipo": tipo,
-                "colaborador_nome": colaborador["nome"],
-                "data_inicial": data_inicial,
-                "data_final": data_final,
-                "adiantamento": adiantamento_flag,
-                "valor_adiantamento": valor_adiantamento,
-            }
-        df = st.session_state.get("rdv_table")
-        if df is not None:
-            column_config = {"DATA": st.column_config.Column("Data", disabled=True)}
-            st.session_state["rdv_table"] = st.data_editor(
-                df, column_config=column_config, use_container_width=True
+        if st.button("Gerar imagem do RDV (PNG)", type="primary"):
+            linhas = build_table_dataframe(tipo, data_inicial, data_final).to_dict("records")
+            img_buffer = generate_image(
+                colaborador_nome=colaborador["nome"],
+                tipo=tipo,
+                data_inicial=data_inicial,
+                data_final=data_final,
+                adiantamento=adiantamento_flag,
+                valor_adiantamento=valor_adiantamento if adiantamento_flag else 0.0,
+                linhas=linhas,
             )
-            df = st.session_state["rdv_table"]
-            total = sum_total(df.to_dict("records"))
-            st.markdown(f"**TOTAL DA QUINZENA EM R$:** {format_currency(total)}")
-            if st.button("Salvar RDV"):
-                if df.empty:
-                    st.error("Tabela vazia.")
-                else:
-                    linhas = []
-                    for _, row in df.iterrows():
-                        linhas.append(
-                            {
-                                "DATA": parse_date_br(row["DATA"]).isoformat(),
-                                "CIDADE": row.get("CIDADE", ""),
-                                "HOTEL": row.get("HOTEL") if tipo == "AJUDANTE" else None,
-                                "VALOR_HOTEL": to_float(row.get("VALOR_HOTEL")) if tipo == "AJUDANTE" else None,
-                                "DIARIA_EM_VIAGEM": to_float(row.get("DIARIA_EM_VIAGEM")),
-                                "TICKET_ALIMENTACAO": to_float(row.get("TICKET_ALIMENTACAO")),
-                            }
-                        )
-                    insert_rdv(
-                        colaborador["nome"],
-                        tipo,
-                        data_inicial,
-                        data_final,
-                        adiantamento_flag,
-                        valor_adiantamento if adiantamento_flag else 0.0,
-                        total,
-                        linhas,
-                    )
-                    st.success("RDV salvo.")
-                    st.session_state["rdv_table"] = None
-                    st.session_state["rdv_meta"] = {}
-            if st.button("Gerar imagem do RDV (PNG)"):
-                meta = st.session_state.get("rdv_meta", {})
-                if not meta:
-                    st.error("Gere a tabela antes.")
-                else:
-                    img_buffer = generate_image(
-                        colaborador_nome=colaborador["nome"],
-                        tipo=tipo,
-                        data_inicial=data_inicial,
-                        data_final=data_final,
-                        adiantamento=adiantamento_flag,
-                        valor_adiantamento=valor_adiantamento if adiantamento_flag else 0.0,
-                        linhas=df.to_dict("records"),
-                        mostrar_valores=True,
-                    )
-                    st.session_state["generated_image_data"] = img_buffer.getvalue()
-                    st.session_state["generated_image_name"] = (
-                        f"RDV_{colaborador['nome'].replace(' ', '_')}_{tipo}_"
-                        f"{data_inicial.strftime('%Y%m%d')}-{data_final.strftime('%Y%m%d')}.png"
-                    )
-                    st.session_state["generated_image_page"] = "Novo RDV"
+            st.session_state["generated_image_data"] = img_buffer.getvalue()
+            st.session_state["generated_image_name"] = (
+                f"RDV_{colaborador['nome'].replace(' ', '_')}_{tipo}_"
+                f"{data_inicial.strftime('%Y%m%d')}-{data_final.strftime('%Y%m%d')}.png"
+            )
+            st.session_state["generated_image_page"] = "Novo RDV"
+            st.toast("Imagem do RDV gerada.")
         render_generated_image("Novo RDV")
     else:
-        if st.button(f"Gerar RDVs para todos os {tipo.lower()}s"):
+        if st.button(f"Gerar RDVs para todos os {tipo.lower()}s", type="primary"):
             template = build_table_dataframe(tipo, data_inicial, data_final).to_dict("records")
             previews = []
             for colab in colaboradores:
@@ -1060,24 +1267,35 @@ def pagina_novo_rdv() -> None:
                     }
                 )
             st.session_state["batch_previews"] = {"tipo": tipo, "previews": previews}
-            st.success(f"Gerados {len(previews)} RDVs.")
+            st.toast(f"{len(previews)} RDVs gerados.")
         batch = st.session_state.get("batch_previews", {})
         if batch.get("tipo") == tipo:
-            for idx, preview in enumerate(batch["previews"]):
-                st.subheader(preview["nome"])
-                st.image(preview["image"], use_column_width=True)
-                st.download_button(
-                    "Baixar RDV (PNG)",
-                    data=preview["image"],
-                    file_name=preview["file_name"],
-                    mime="image/png",
-                    key=f"dl_{tipo}_{idx}",
-                )
-                if st.button("Imprimir RDV", key=f"pr_{tipo}_{idx}"):
-                    open_print_window(preview["image"])
-            if batch.get("previews"):
-                if st.button(f"Imprimir todos os {tipo.lower()}s", key=f"pr_all_{tipo}"):
-                    open_print_window_batch([p["image"] for p in batch["previews"]])
+            previews = batch.get("previews", [])
+            if previews:
+                st.divider()
+                batch_title_col, batch_print_col = st.columns([5, 1.4], vertical_alignment="center")
+                with batch_title_col:
+                    st.subheader("RDVs gerados")
+                    st.caption(f"{len(previews)} arquivos para {tipo.lower()}s")
+                with batch_print_col:
+                    if st.button("Imprimir todos", key=f"pr_all_{tipo}", use_container_width=True):
+                        open_print_window_batch([p["image"] for p in previews])
+            for idx, preview in enumerate(previews):
+                with st.expander(preview["nome"], expanded=idx == 0):
+                    download_col, print_col, spacer_col = st.columns([1.2, 1.2, 4], vertical_alignment="center")
+                    with download_col:
+                        st.download_button(
+                            "Baixar PNG",
+                            data=preview["image"],
+                            file_name=preview["file_name"],
+                            mime="image/png",
+                            key=f"dl_{tipo}_{idx}",
+                            use_container_width=True,
+                        )
+                    with print_col:
+                        if st.button("Imprimir", key=f"pr_{tipo}_{idx}", use_container_width=True):
+                            open_print_window(preview["image"])
+                    render_image_preview(preview["image"], f"Prévia do RDV de {preview['nome']}")
 
 
 def pagina_relatorios() -> None:
@@ -1167,27 +1385,27 @@ def pagina_relatorios() -> None:
 
 
 def main() -> None:
-    ensure_session_state()
     init_db()
+    ensure_session_state()
     init_neon_db()
+    apply_ui_styles()
 
-    logo_col, title_col = st.columns([1, 5])
-    with logo_col:
-        if LOGO_PATH.exists():
-            st.image(str(LOGO_PATH), width=80)
-        else:
-            st.markdown("JR")
-    with title_col:
-        st.title("Relatório de Despesas de Viagem - RDV JR")
+    render_app_header()
 
-    menu_opcoes = ["Novo RDV", "Colaboradores", "Relatórios salvos"]
-    page = st.sidebar.selectbox("Menu", menu_opcoes, key="page_selector")
+    menu_opcoes = ["Novo RDV", "Colaboradores"]
+    if st.session_state.get("page_selector") not in menu_opcoes:
+        st.session_state["page_selector"] = "Novo RDV"
+    st.sidebar.markdown("### Menu")
+    page = st.sidebar.radio(
+        "Menu",
+        menu_opcoes,
+        key="page_selector",
+        label_visibility="collapsed",
+    )
     if page == "Novo RDV":
         pagina_novo_rdv()
-    elif page == "Colaboradores":
-        pagina_colaboradores()
     else:
-        pagina_relatorios()
+        pagina_colaboradores()
 
 
 if __name__ == "__main__":
