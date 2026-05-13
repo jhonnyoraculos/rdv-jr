@@ -44,6 +44,13 @@ COLABORADORES_FALLBACK: list[dict] = []
 
 TIPOS_COLABORADOR = ["MOTORISTA", "AJUDANTE"]
 QUINZENA_DIAS = 13
+COLABORADOR_EXTRA_FIELDS = [
+    "telefone",
+    "email",
+    "contato_emergencia_nome",
+    "contato_emergencia_telefone",
+    "observacoes",
+]
 
 st.set_page_config(page_title="RDV JR", layout="wide")
 
@@ -374,6 +381,11 @@ def init_neon_db() -> None:
                 )
                 """
             )
+            cur.execute("ALTER TABLE colaboradores ADD COLUMN IF NOT EXISTS telefone TEXT DEFAULT ''")
+            cur.execute("ALTER TABLE colaboradores ADD COLUMN IF NOT EXISTS email TEXT DEFAULT ''")
+            cur.execute("ALTER TABLE colaboradores ADD COLUMN IF NOT EXISTS contato_emergencia_nome TEXT DEFAULT ''")
+            cur.execute("ALTER TABLE colaboradores ADD COLUMN IF NOT EXISTS contato_emergencia_telefone TEXT DEFAULT ''")
+            cur.execute("ALTER TABLE colaboradores ADD COLUMN IF NOT EXISTS observacoes TEXT DEFAULT ''")
             cur.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_colaboradores_nome_tipo ON colaboradores(nome, tipo)")
     conn.close()
 
@@ -382,37 +394,93 @@ def neon_get_colaboradores(tipo: Optional[str] = None) -> list[dict]:
     conn = get_neon_connection()
     if not conn:
         return []
+    fields = "id, nome, tipo, telefone, email, contato_emergencia_nome, contato_emergencia_telefone, observacoes"
     with conn:
         with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
             if tipo:
                 cur.execute(
-                    "SELECT id, nome, tipo FROM colaboradores WHERE tipo = %s ORDER BY nome",
+                    f"SELECT {fields} FROM colaboradores WHERE tipo = %s ORDER BY nome",
                     (tipo,),
                 )
             else:
-                cur.execute("SELECT id, nome, tipo FROM colaboradores ORDER BY nome")
+                cur.execute(f"SELECT {fields} FROM colaboradores ORDER BY nome")
             rows = cur.fetchall()
     conn.close()
     return [dict(r) for r in rows]
 
 
-def neon_insert_colaborador(nome: str, tipo: str) -> None:
+def neon_insert_colaborador(
+    nome: str,
+    tipo: str,
+    telefone: str = "",
+    email: str = "",
+    contato_emergencia_nome: str = "",
+    contato_emergencia_telefone: str = "",
+    observacoes: str = "",
+) -> None:
     conn = get_neon_connection()
     if not conn:
         return
     with conn:
         with conn.cursor() as cur:
-            cur.execute("INSERT INTO colaboradores (nome, tipo) VALUES (%s, %s)", (nome.strip(), tipo))
+            cur.execute(
+                """
+                INSERT INTO colaboradores (
+                    nome, tipo, telefone, email, contato_emergencia_nome,
+                    contato_emergencia_telefone, observacoes
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    nome.strip(),
+                    tipo,
+                    telefone.strip(),
+                    email.strip(),
+                    contato_emergencia_nome.strip(),
+                    contato_emergencia_telefone.strip(),
+                    observacoes.strip(),
+                ),
+            )
     conn.close()
 
 
-def neon_update_colaborador(colab_id: int, nome: str, tipo: str) -> None:
+def neon_update_colaborador(
+    colab_id: int,
+    nome: str,
+    tipo: str,
+    telefone: str = "",
+    email: str = "",
+    contato_emergencia_nome: str = "",
+    contato_emergencia_telefone: str = "",
+    observacoes: str = "",
+) -> None:
     conn = get_neon_connection()
     if not conn:
         return
     with conn:
         with conn.cursor() as cur:
-            cur.execute("UPDATE colaboradores SET nome = %s, tipo = %s WHERE id = %s", (nome.strip(), tipo, colab_id))
+            cur.execute(
+                """
+                UPDATE colaboradores
+                SET nome = %s,
+                    tipo = %s,
+                    telefone = %s,
+                    email = %s,
+                    contato_emergencia_nome = %s,
+                    contato_emergencia_telefone = %s,
+                    observacoes = %s
+                WHERE id = %s
+                """,
+                (
+                    nome.strip(),
+                    tipo,
+                    telefone.strip(),
+                    email.strip(),
+                    contato_emergencia_nome.strip(),
+                    contato_emergencia_telefone.strip(),
+                    observacoes.strip(),
+                    colab_id,
+                ),
+            )
     conn.close()
 
 
@@ -440,6 +508,20 @@ def get_all_colaboradores() -> list[dict]:
         if colabs:
             return colabs
     return COLABORADORES_FALLBACK
+
+
+def colaboradores_dataframe(colabs: list[dict]) -> pd.DataFrame:
+    columns = ["nome", "tipo", *COLABORADOR_EXTRA_FIELDS]
+    labels = {
+        "nome": "Nome",
+        "tipo": "Tipo",
+        "telefone": "Telefone",
+        "email": "E-mail",
+        "contato_emergencia_nome": "Contato de emergência",
+        "contato_emergencia_telefone": "Telefone emergência",
+        "observacoes": "Observações",
+    }
+    return pd.DataFrame(colabs).reindex(columns=columns).fillna("").rename(columns=labels)
 
 # -------------------- Utilidades --------------------
 
@@ -1078,13 +1160,24 @@ def pagina_colaboradores() -> None:
         st.info("Neon não configurado. Mostrando lista somente para referência (não editável).")
     with st.container(border=True):
         st.subheader("Novo cadastro")
-        st.caption("Cadastre um colaborador informando nome e tipo.")
+        st.caption("Cadastre o colaborador. Os dados de contato ficam apenas como registro interno.")
         with st.form("form_novo_colaborador", clear_on_submit=True, border=False):
             col1, col2 = st.columns([3, 1])
             with col1:
                 nome_novo = st.text_input("Nome do colaborador")
             with col2:
                 tipo_novo = st.selectbox("Tipo", TIPOS_COLABORADOR, key="tipo_novo")
+            contato_col, email_col = st.columns(2)
+            with contato_col:
+                telefone_novo = st.text_input("Telefone")
+            with email_col:
+                email_novo = st.text_input("E-mail")
+            emergencia_nome_col, emergencia_tel_col = st.columns(2)
+            with emergencia_nome_col:
+                contato_emergencia_nome_novo = st.text_input("Contato de emergência")
+            with emergencia_tel_col:
+                contato_emergencia_telefone_novo = st.text_input("Telefone emergência")
+            observacoes_novo = st.text_area("Observações", height=80)
             salvar = st.form_submit_button(
                 "Salvar colaborador",
                 type="primary",
@@ -1096,7 +1189,15 @@ def pagina_colaboradores() -> None:
             if not nome_novo.strip():
                 st.error("Informe o nome.")
             else:
-                neon_insert_colaborador(nome_novo, tipo_novo)
+                neon_insert_colaborador(
+                    nome_novo,
+                    tipo_novo,
+                    telefone_novo,
+                    email_novo,
+                    contato_emergencia_nome_novo,
+                    contato_emergencia_telefone_novo,
+                    observacoes_novo,
+                )
                 st.success("Colaborador salvo.")
                 st.rerun()
 
@@ -1121,6 +1222,8 @@ def pagina_colaboradores() -> None:
             st.session_state["edit_selected_id"] = colaborador_id
             st.session_state["edit_nome"] = csel.get("nome", "")
             st.session_state["edit_tipo"] = tipo_atual
+            for field in COLABORADOR_EXTRA_FIELDS:
+                st.session_state[f"edit_{field}"] = csel.get(field, "") or ""
 
         with st.form("form_editar_colaborador", border=False):
             col1, col2 = st.columns([3, 1])
@@ -1128,6 +1231,23 @@ def pagina_colaboradores() -> None:
                 novo_nome = st.text_input("Nome", key="edit_nome")
             with col2:
                 novo_tipo = st.selectbox("Tipo", TIPOS_COLABORADOR, key="edit_tipo")
+            contato_col, email_col = st.columns(2)
+            with contato_col:
+                novo_telefone = st.text_input("Telefone", key="edit_telefone")
+            with email_col:
+                novo_email = st.text_input("E-mail", key="edit_email")
+            emergencia_nome_col, emergencia_tel_col = st.columns(2)
+            with emergencia_nome_col:
+                novo_contato_emergencia_nome = st.text_input(
+                    "Contato de emergência",
+                    key="edit_contato_emergencia_nome",
+                )
+            with emergencia_tel_col:
+                novo_contato_emergencia_telefone = st.text_input(
+                    "Telefone emergência",
+                    key="edit_contato_emergencia_telefone",
+                )
+            novas_observacoes = st.text_area("Observações", key="edit_observacoes", height=80)
 
             btn_atualizar, btn_excluir = st.columns(2)
             with btn_atualizar:
@@ -1148,7 +1268,16 @@ def pagina_colaboradores() -> None:
             if not novo_nome.strip():
                 st.error("Informe o nome.")
             else:
-                neon_update_colaborador(colaborador_id, novo_nome, novo_tipo)
+                neon_update_colaborador(
+                    colaborador_id,
+                    novo_nome,
+                    novo_tipo,
+                    novo_telefone,
+                    novo_email,
+                    novo_contato_emergencia_nome,
+                    novo_contato_emergencia_telefone,
+                    novas_observacoes,
+                )
                 st.success("Atualizado.")
                 st.rerun()
 
@@ -1158,7 +1287,7 @@ def pagina_colaboradores() -> None:
             st.rerun()
 
     st.subheader("Lista")
-    st.dataframe(pd.DataFrame(colabs), use_container_width=True)
+    st.dataframe(colaboradores_dataframe(colabs), width="stretch", hide_index=True)
 
 
 def pagina_novo_rdv() -> None:
